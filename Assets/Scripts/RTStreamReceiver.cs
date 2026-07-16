@@ -5,6 +5,7 @@ public class RTStreamReceiver : MonoBehaviour
 {
     public RenderTexture displayRT;
     public RTLocalSim localSim;
+    public StreamClient streamClient;
     [SerializeField] private Button localBtn;
     [SerializeField] private Button webBtn;
 
@@ -12,6 +13,7 @@ public class RTStreamReceiver : MonoBehaviour
     {
         localBtn.onClick.AddListener(SetLocal);
         webBtn.onClick.AddListener(SetWeb);
+        streamClient.displayRT = displayRT;
         SetLocal();
     }
 
@@ -20,6 +22,7 @@ public class RTStreamReceiver : MonoBehaviour
         localBtn.interactable = false;
         webBtn.interactable = true;
         localSim.enabled = true;
+        streamClient.Disconnect();
     }
 
     private void SetWeb()
@@ -30,5 +33,6 @@ public class RTStreamReceiver : MonoBehaviour
         RenderTexture.active = displayRT;
         GL.Clear(true, true, Color.black);
         RenderTexture.active = null;
+        streamClient.Connect();
     }
 }

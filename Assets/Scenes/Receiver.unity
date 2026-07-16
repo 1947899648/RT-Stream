@@ -154,6 +154,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   displayRT: {fileID: 8400000, guid: b1ce9449bb2f6d2458a2201843f9467e, type: 2}
   localSim: {fileID: 439335095}
+  streamClient: {fileID: 249526265}
   localBtn: {fileID: 147822954}
   webBtn: {fileID: 387017523}
 --- !u!4 &91305503
@@ -293,6 +294,53 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 147822952}
   m_CullTransparentMesh: 1
+--- !u!1 &249526264
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 249526266}
+  - component: {fileID: 249526265}
+  m_Layer: 0
+  m_Name: StreamClient
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &249526265
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 249526264}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 43929a95497b31d48b5a652d81dd0f7f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  hostIP: 127.0.0.1
+  port: 7777
+  displayRT: {fileID: 0}
+--- !u!4 &249526266
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 249526264}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 7
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &387017521
 GameObject:
   m_ObjectHideFlags: 0
