@@ -1,15 +1,15 @@
-using UnityEngine.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class SceneLoader : MonoBehaviour
 {
-    public void LoadSender()
-    {
-        SceneManager.LoadScene("Sender");
-    }
+    [SerializeField] private Button senderBtn;
+    [SerializeField] private Button receiverBtn;
 
-    public void LoadReceiver()
+    void Start()
     {
-        SceneManager.LoadScene("Receiver");
+        senderBtn.onClick.AddListener(() => SceneManager.LoadScene("Sender"));
+        receiverBtn.onClick.AddListener(() => SceneManager.LoadScene("Receiver"));
     }
 }

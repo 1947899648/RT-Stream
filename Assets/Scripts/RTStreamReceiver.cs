@@ -5,22 +5,24 @@ public class RTStreamReceiver : MonoBehaviour
 {
     public RenderTexture displayRT;
     public RTLocalSim localSim;
-    public Button localBtn;
-    public Button webBtn;
+    [SerializeField] private Button localBtn;
+    [SerializeField] private Button webBtn;
 
     void Start()
     {
+        localBtn.onClick.AddListener(SetLocal);
+        webBtn.onClick.AddListener(SetWeb);
         SetLocal();
     }
 
-    public void SetLocal()
+    private void SetLocal()
     {
         localBtn.interactable = false;
         webBtn.interactable = true;
         localSim.enabled = true;
     }
 
-    public void SetWeb()
+    private void SetWeb()
     {
         localBtn.interactable = true;
         webBtn.interactable = false;

@@ -13,6 +13,12 @@ public class DrawingCanvas : MonoBehaviour
     [Range(0.001f, 0.1f)]
     public float brushSize = 0.01f;
 
+    [Header("按钮")]
+    [SerializeField] private Button redBtn;
+    [SerializeField] private Button greenBtn;
+    [SerializeField] private Button blueBtn;
+    [SerializeField] private Button clearBtn;
+
     private RenderTexture canvasRT;
     private RenderTexture tempRT;
     private Material brushMat;
@@ -42,6 +48,11 @@ public class DrawingCanvas : MonoBehaviour
         ClearCanvas();
         rawImage.texture = canvasRT;
         brushMat = new Material(Shader.Find("Custom/Brush"));
+
+        redBtn.onClick.AddListener(SetRed);
+        greenBtn.onClick.AddListener(SetGreen);
+        blueBtn.onClick.AddListener(SetBlue);
+        clearBtn.onClick.AddListener(ClearCanvas);
     }
 
     void Update()
@@ -95,9 +106,9 @@ public class DrawingCanvas : MonoBehaviour
         Graphics.Blit(tempRT, canvasRT, brushMat);
     }
 
-    public void SetRed() => brushColor = Color.red;
-    public void SetGreen() => brushColor = Color.green;
-    public void SetBlue() => brushColor = Color.blue;
+    private void SetRed() => brushColor = Color.red;
+    private void SetGreen() => brushColor = Color.green;
+    private void SetBlue() => brushColor = Color.blue;
 
     public void ClearCanvas()
     {

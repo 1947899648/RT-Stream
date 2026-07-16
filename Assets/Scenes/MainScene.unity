@@ -330,6 +330,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fab95f58b67d9634685777206b5987b7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  senderBtn: {fileID: 1913454304}
+  receiverBtn: {fileID: 1539366691}
 --- !u!4 &1252470419
 Transform:
   m_ObjectHideFlags: 0
@@ -508,19 +510,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1539366692}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 1252470418}
-        m_TargetAssemblyTypeName: SceneLoader, Assembly-CSharp
-        m_MethodName: LoadReceiver
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &1539366692
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -744,19 +734,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1913454305}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 1252470418}
-        m_TargetAssemblyTypeName: SceneLoader, Assembly-CSharp
-        m_MethodName: LoadSender
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &1913454305
 MonoBehaviour:
   m_ObjectHideFlags: 0
