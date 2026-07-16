@@ -28,7 +28,7 @@ public static class FrameCodec
         BitConverter.GetBytes((uint)payloadLen).CopyTo(packet, 3);
 
         int pos = HeaderSize;
-        foreach (var tile in tiles)
+        foreach (DirtyTile tile in tiles)
         {
             BitConverter.GetBytes(tile.index).CopyTo(packet, pos);
             Buffer.BlockCopy(tile.data, 0, packet, pos + 4, TileSize);
@@ -61,7 +61,7 @@ public static class FrameCodec
     public static List<DirtyTile> DecodeDeltaFrame(byte[] packet)
     {
         ushort tileCount = BitConverter.ToUInt16(packet, 1);
-        var tiles = new List<DirtyTile>(tileCount);
+        List<DirtyTile> tiles = new List<DirtyTile>(tileCount);
         int pos = HeaderSize;
 
         for (int i = 0; i < tileCount; i++)

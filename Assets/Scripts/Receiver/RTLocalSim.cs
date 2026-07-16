@@ -6,14 +6,14 @@ public class RTLocalSim : MonoBehaviour
     [Range(0.1f, 2f)]
     public float interval = 0.3f;
 
-    private Texture2D tempTex;
-    private float timer;
-    private Color[] colors;
+    private Texture2D _tempTex;
+    private float _timer;
+    private Color[] _colors;
 
     void Start()
     {
-        tempTex = new Texture2D(targetRT.width, targetRT.height, TextureFormat.RGBA32, false);
-        colors = new Color[]
+        _tempTex = new Texture2D(targetRT.width, targetRT.height, TextureFormat.RGBA32, false);
+        _colors = new Color[]
         {
             Color.red, Color.green, Color.blue,
             Color.yellow, Color.cyan, Color.magenta,
@@ -23,27 +23,27 @@ public class RTLocalSim : MonoBehaviour
 
     void Update()
     {
-        timer += Time.deltaTime;
-        if (timer < interval) return;
-        timer = 0f;
+        _timer += Time.deltaTime;
+        if (_timer < interval) return;
+        _timer = 0f;
 
-        var w = tempTex.width;
-        var h = tempTex.height;
-        var pixels = tempTex.GetPixels();
+        int w = _tempTex.width;
+        int h = _tempTex.height;
+        Color[] pixels = _tempTex.GetPixels();
 
         int pattern = Random.Range(0, 3);
         switch (pattern)
         {
             case 0:
-                var c = colors[Random.Range(0, colors.Length)];
+                Color c = _colors[Random.Range(0, _colors.Length)];
                 for (int i = 0; i < pixels.Length; i++) pixels[i] = c;
                 break;
             case 1:
-                var c1 = colors[Random.Range(0, colors.Length)];
-                var c2 = colors[Random.Range(0, colors.Length)];
+                Color c1 = _colors[Random.Range(0, _colors.Length)];
+                Color c2 = _colors[Random.Range(0, _colors.Length)];
                 for (int y = 0; y < h; y++)
                 {
-                    var row = y % 20 < 10 ? c1 : c2;
+                    Color row = y % 20 < 10 ? c1 : c2;
                     for (int x = 0; x < w; x++) pixels[y * w + x] = row;
                 }
                 break;
@@ -54,14 +54,14 @@ public class RTLocalSim : MonoBehaviour
                 break;
         }
 
-        tempTex.SetPixels(pixels);
-        tempTex.Apply();
-        Graphics.Blit(tempTex, targetRT);
+        _tempTex.SetPixels(pixels);
+        _tempTex.Apply();
+        Graphics.Blit(_tempTex, targetRT);
     }
 
     void OnDestroy()
     {
         if (targetRT != null) targetRT.Release();
-        if (tempTex != null) Destroy(tempTex);
+        if (_tempTex != null) Destroy(_tempTex);
     }
 }

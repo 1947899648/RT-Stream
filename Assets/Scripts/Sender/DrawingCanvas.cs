@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Serialization;
 
 [RequireComponent(typeof(RawImage))]
 public class DrawingCanvas : MonoBehaviour
@@ -14,83 +15,87 @@ public class DrawingCanvas : MonoBehaviour
     public float brushSize = 0.01f;
 
     [Header("按钮")]
-    [SerializeField] private Button redBtn;
-    [SerializeField] private Button greenBtn;
-    [SerializeField] private Button blueBtn;
-    [SerializeField] private Button clearBtn;
+    [FormerlySerializedAs("redBtn")]
+    [SerializeField] private Button _redBtn;
+    [FormerlySerializedAs("greenBtn")]
+    [SerializeField] private Button _greenBtn;
+    [FormerlySerializedAs("blueBtn")]
+    [SerializeField] private Button _blueBtn;
+    [FormerlySerializedAs("clearBtn")]
+    [SerializeField] private Button _clearBtn;
 
-    private RenderTexture canvasRT;
-    private RenderTexture tempRT;
-    private Material brushMat;
-    private RawImage rawImage;
-    private RectTransform rt;
-    private Vector2? prevUV;
+    private RenderTexture _canvasRT;
+    private RenderTexture _tempRT;
+    private Material _brushMat;
+    private RawImage _rawImage;
+    private RectTransform _rt;
+    private Vector2? _prevUV;
 
-    public RenderTexture CanvasTexture => canvasRT;
+    public RenderTexture CanvasTexture => _canvasRT;
 
     void Awake()
     {
-        rawImage = GetComponent<RawImage>();
-        rt = GetComponent<RectTransform>();
+        _rawImage = GetComponent<RawImage>();
+        _rt = GetComponent<RectTransform>();
     }
 
     void Start()
     {
-        canvasRT = new RenderTexture(textureWidth, textureHeight, 0, RenderTextureFormat.ARGB32)
+        _canvasRT = new RenderTexture(textureWidth, textureHeight, 0, RenderTextureFormat.ARGB32)
         {
             filterMode = FilterMode.Bilinear
         };
-        tempRT = new RenderTexture(textureWidth, textureHeight, 0, RenderTextureFormat.ARGB32)
+        _tempRT = new RenderTexture(textureWidth, textureHeight, 0, RenderTextureFormat.ARGB32)
         {
             filterMode = FilterMode.Bilinear
         };
 
         ClearCanvas();
-        rawImage.texture = canvasRT;
-        brushMat = new Material(Shader.Find("Custom/Brush"));
+        _rawImage.texture = _canvasRT;
+        _brushMat = new Material(Shader.Find("Custom/Brush"));
 
-        redBtn.onClick.AddListener(SetRed);
-        greenBtn.onClick.AddListener(SetGreen);
-        blueBtn.onClick.AddListener(SetBlue);
-        clearBtn.onClick.AddListener(ClearCanvas);
+        _redBtn.onClick.AddListener(SetRed);
+        _greenBtn.onClick.AddListener(SetGreen);
+        _blueBtn.onClick.AddListener(SetBlue);
+        _clearBtn.onClick.AddListener(ClearCanvas);
     }
 
     void Update()
     {
         if (Input.GetMouseButtonDown(0))
         {
-            var uv = ScreenToUV(Input.mousePosition);
+            Vector2? uv = ScreenToUV(Input.mousePosition);
             if (uv.HasValue)
             {
-                prevUV = uv.Value;
+                _prevUV = uv.Value;
                 DrawAt(uv.Value);
             }
         }
-        else if (Input.GetMouseButton(0) && prevUV.HasValue)
+        else if (Input.GetMouseButton(0) && _prevUV.HasValue)
         {
-            var uv = ScreenToUV(Input.mousePosition);
+            Vector2? uv = ScreenToUV(Input.mousePosition);
             if (uv.HasValue)
             {
-                float dist = Vector2.Distance(prevUV.Value, uv.Value);
+                float dist = Vector2.Distance(_prevUV.Value, uv.Value);
                 int steps = Mathf.Max(1, Mathf.CeilToInt(dist / (brushSize * 0.5f)));
                 for (int i = 1; i <= steps; i++)
-                    DrawAt(Vector2.Lerp(prevUV.Value, uv.Value, (float)i / steps));
-                prevUV = uv.Value;
+                    DrawAt(Vector2.Lerp(_prevUV.Value, uv.Value, (float)i / steps));
+                _prevUV = uv.Value;
             }
         }
         else if (Input.GetMouseButtonUp(0))
         {
-            prevUV = null;
+            _prevUV = null;
         }
     }
 
     Vector2? ScreenToUV(Vector2 screenPos)
     {
-        if (!RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos))
+        if (!RectTransformUtility.RectangleContainsScreenPoint(_rt, screenPos))
             return null;
 
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(rt, screenPos, null, out var lp);
-        var rect = rt.rect;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(_rt, screenPos, null, out Vector2 lp);
+        Rect rect = _rt.rect;
         return new Vector2(
             Mathf.InverseLerp(rect.xMin, rect.xMax, lp.x),
             Mathf.InverseLerp(rect.yMin, rect.yMax, lp.y)
@@ -99,11 +104,11 @@ public class DrawingCanvas : MonoBehaviour
 
     void DrawAt(Vector2 uv)
     {
-        brushMat.SetVector("_BrushPos", new Vector4(uv.x, uv.y, brushSize, 0));
-        brushMat.SetColor("_BrushColor", brushColor);
+        _brushMat.SetVector("_BrushPos", new Vector4(uv.x, uv.y, brushSize, 0));
+        _brushMat.SetColor("_BrushColor", brushColor);
 
-        Graphics.Blit(canvasRT, tempRT);
-        Graphics.Blit(tempRT, canvasRT, brushMat);
+        Graphics.Blit(_canvasRT, _tempRT);
+        Graphics.Blit(_tempRT, _canvasRT, _brushMat);
     }
 
     private void SetRed() => brushColor = Color.red;
@@ -112,15 +117,15 @@ public class DrawingCanvas : MonoBehaviour
 
     public void ClearCanvas()
     {
-        RenderTexture.active = canvasRT;
+        RenderTexture.active = _canvasRT;
         GL.Clear(true, true, Color.white);
         RenderTexture.active = null;
     }
 
     void OnDestroy()
     {
-        if (canvasRT != null) canvasRT.Release();
-        if (tempRT != null) tempRT.Release();
-        if (brushMat != null) Destroy(brushMat);
+        if (_canvasRT != null) _canvasRT.Release();
+        if (_tempRT != null) _tempRT.Release();
+        if (_brushMat != null) Destroy(_brushMat);
     }
 }

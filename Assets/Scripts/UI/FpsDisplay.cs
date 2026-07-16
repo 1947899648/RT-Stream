@@ -2,29 +2,29 @@ using UnityEngine;
 
 public class FpsDisplay : MonoBehaviour
 {
-    private static FpsDisplay instance;
-    private float deltaTime;
+    private static FpsDisplay _instance;
+    private float _deltaTime;
 
     void Awake()
     {
-        if (instance != null)
+        if (_instance != null)
         {
             Destroy(gameObject);
             return;
         }
-        instance = this;
+        _instance = this;
         DontDestroyOnLoad(gameObject);
     }
 
     void Update()
     {
-        deltaTime += (Time.unscaledDeltaTime - deltaTime) * 0.1f;
+        _deltaTime += (Time.unscaledDeltaTime - _deltaTime) * 0.1f;
     }
 
     void OnGUI()
     {
-        float fps = 1.0f / deltaTime;
-        float ms = deltaTime * 1000f;
+        float fps = 1.0f / _deltaTime;
+        float ms = _deltaTime * 1000f;
 
         GUIStyle style = new GUIStyle();
         style.fontSize = 40;

@@ -11,50 +11,50 @@ public class StreamHost : MonoBehaviour
     public int targetFps = 30;
     public int keyFrameInterval = 30;
 
-    private TcpListener listener;
-    private List<TcpClient> clients = new List<TcpClient>();
-    private TileDiffer tileDiffer;
-    private int seq;
-    private float timer;
-    private Thread acceptThread;
-    private bool running;
-    private int texWidth, texHeight;
+    private TcpListener _listener;
+    private List<TcpClient> _clients = new List<TcpClient>();
+    private TileDiffer _tileDiffer;
+    private int _seq;
+    private float _timer;
+    private Thread _acceptThread;
+    private bool _running;
+    private int _texWidth, _texHeight;
 
     public int ClientCount
     {
-        get { lock (clients) return clients.Count; }
+        get { lock (_clients) return _clients.Count; }
     }
 
     void Start()
     {
-        var canvas = FindObjectOfType<DrawingCanvas>();
-        texWidth = canvas.textureWidth;
-        texHeight = canvas.textureHeight;
-        tileDiffer = new TileDiffer(canvas.CanvasTexture);
+        DrawingCanvas canvas = FindObjectOfType<DrawingCanvas>();
+        _texWidth = canvas.textureWidth;
+        _texHeight = canvas.textureHeight;
+        _tileDiffer = new TileDiffer(canvas.CanvasTexture);
 
-        listener = new TcpListener(IPAddress.Any, port);
-        listener.Start();
-        running = true;
-        acceptThread = new Thread(AcceptLoop) { IsBackground = true };
-        acceptThread.Start();
+        _listener = new TcpListener(IPAddress.Any, port);
+        _listener.Start();
+        _running = true;
+        _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
+        _acceptThread.Start();
     }
 
     void Update()
     {
-        tileDiffer.Update();
+        _tileDiffer.Update();
 
-        timer += Time.deltaTime;
+        _timer += Time.deltaTime;
         float interval = 1f / targetFps;
-        if (timer < interval) return;
-        timer -= interval;
+        if (_timer < interval) return;
+        _timer -= interval;
 
-        if (!tileDiffer.TryGetDirtyTiles(out var dirtyTiles)) return;
+        if (!_tileDiffer.TryGetDirtyTiles(out List<DirtyTile> dirtyTiles)) return;
         if (dirtyTiles.Count == 0) return;
 
         byte[] packet;
-        if (seq % keyFrameInterval == 0)
+        if (_seq % keyFrameInterval == 0)
         {
-            packet = FrameCodec.EncodeKeyFrame(texWidth, texHeight, tileDiffer.LatestRawData);
+            packet = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, _tileDiffer.LatestRawData);
         }
         else
         {
@@ -62,25 +62,25 @@ public class StreamHost : MonoBehaviour
         }
 
         SendToAll(packet);
-        seq++;
+        _seq++;
     }
 
     void AcceptLoop()
     {
-        while (running)
+        while (_running)
         {
             try
             {
-                var client = listener.AcceptTcpClient();
-                lock (clients)
+                TcpClient client = _listener.AcceptTcpClient();
+                lock (_clients)
                 {
-                    clients.Add(client);
+                    _clients.Add(client);
                 }
 
-                var lastData = tileDiffer.LatestRawData;
+                byte[] lastData = _tileDiffer.LatestRawData;
                 if (lastData != null)
                 {
-                    byte[] keyFrame = FrameCodec.EncodeKeyFrame(texWidth, texHeight, lastData);
+                    byte[] keyFrame = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, lastData);
                     SendToOne(client, keyFrame);
                 }
             }
@@ -101,18 +101,18 @@ public class StreamHost : MonoBehaviour
         BitConverter.GetBytes(data.Length).CopyTo(prefixed, 0);
         Buffer.BlockCopy(data, 0, prefixed, 4, data.Length);
 
-        lock (clients)
+        lock (_clients)
         {
-            for (int i = clients.Count - 1; i >= 0; i--)
+            for (int i = _clients.Count - 1; i >= 0; i--)
             {
                 try
                 {
-                    clients[i].GetStream().Write(prefixed, 0, prefixed.Length);
+                    _clients[i].GetStream().Write(prefixed, 0, prefixed.Length);
                 }
                 catch
                 {
-                    clients[i].Close();
-                    clients.RemoveAt(i);
+                    _clients[i].Close();
+                    _clients.RemoveAt(i);
                 }
             }
         }
@@ -132,15 +132,15 @@ public class StreamHost : MonoBehaviour
 
     void OnDestroy()
     {
-        running = false;
-        listener?.Stop();
+        _running = false;
+        _listener?.Stop();
 
-        lock (clients)
+        lock (_clients)
         {
-            foreach (var c in clients) c.Close();
-            clients.Clear();
+            foreach (TcpClient c in _clients) c.Close();
+            _clients.Clear();
         }
 
-        acceptThread?.Join(1000);
+        _acceptThread?.Join(1000);
     }
 }

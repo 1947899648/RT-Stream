@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -9,72 +9,72 @@ public class TileDiffer
     public int tileSize = 16;
     public RenderTexture RT { get; private set; }
 
-    private int tilesX, tilesY;
-    private ulong[] prevHashes;
-    private List<DirtyTile> dirtyTiles = new List<DirtyTile>();
-    private byte[] rawData;
-    private bool hasResults;
-    private bool requestInFlight;
+    private int _tilesX, _tilesY;
+    private ulong[] _prevHashes;
+    private List<DirtyTile> _dirtyTiles = new List<DirtyTile>();
+    private byte[] _rawData;
+    private bool _hasResults;
+    private bool _requestInFlight;
 
-    public byte[] LatestRawData => rawData;
-    public int TilesX => tilesX;
-    public int TilesY => tilesY;
+    public byte[] LatestRawData => _rawData;
+    public int TilesX => _tilesX;
+    public int TilesY => _tilesY;
 
     public TileDiffer(RenderTexture rt)
     {
         RT = rt;
-        tilesX = rt.width / tileSize;
-        tilesY = rt.height / tileSize;
-        prevHashes = new ulong[tilesX * tilesY];
+        _tilesX = rt.width / tileSize;
+        _tilesY = rt.height / tileSize;
+        _prevHashes = new ulong[_tilesX * _tilesY];
     }
 
     public void Update()
     {
-        if (!requestInFlight)
+        if (!_requestInFlight)
         {
-            requestInFlight = true;
+            _requestInFlight = true;
             AsyncGPUReadback.Request(RT, 0, TextureFormat.RGBA32, OnReadback);
         }
     }
 
     private void OnReadback(AsyncGPUReadbackRequest request)
     {
-        requestInFlight = false;
+        _requestInFlight = false;
         if (request.hasError) return;
 
-        var data = request.GetData<byte>();
-        rawData = new byte[data.Length];
-        data.CopyTo(rawData);
+        NativeArray<byte> data = request.GetData<byte>();
+        _rawData = new byte[data.Length];
+        data.CopyTo(_rawData);
 
         ComputeDirtyTiles();
-        hasResults = true;
+        _hasResults = true;
     }
 
     private void ComputeDirtyTiles()
     {
-        dirtyTiles.Clear();
-        int rowBytes = tilesX * tileSize * 4;
+        _dirtyTiles.Clear();
+        int rowBytes = _tilesX * tileSize * 4;
         int tileBytes = tileSize * tileSize * 4;
 
-        for (int ty = 0; ty < tilesY; ty++)
+        for (int ty = 0; ty < _tilesY; ty++)
         {
-            for (int tx = 0; tx < tilesX; tx++)
+            for (int tx = 0; tx < _tilesX; tx++)
             {
-                int idx = ty * tilesX + tx;
+                int idx = ty * _tilesX + tx;
                 int srcStart = ty * tileSize * rowBytes + tx * tileSize * 4;
 
                 byte[] tileData = new byte[tileBytes];
                 for (int y = 0; y < tileSize; y++)
                 {
                     int srcRow = srcStart + y * rowBytes;
-                    Buffer.BlockCopy(rawData, srcRow, tileData, y * tileSize * 4, tileSize * 4);
+                    Buffer.BlockCopy(_rawData, srcRow, tileData, y * tileSize * 4, tileSize * 4);
                 }
 
                 ulong hash = FastHash.Compute(tileData, 0, tileBytes);
-                if (hash != prevHashes[idx])
+                if (hash != _prevHashes[idx])
                 {
-                    prevHashes[idx] = hash;
-                    dirtyTiles.Add(new DirtyTile { index = idx, data = tileData });
+                    _prevHashes[idx] = hash;
+                    _dirtyTiles.Add(new DirtyTile { index = idx, data = tileData });
                 }
             }
         }
@@ -82,9 +82,9 @@ public class TileDiffer
 
     public bool TryGetDirtyTiles(out List<DirtyTile> tiles)
     {
-        tiles = dirtyTiles;
-        bool had = hasResults;
-        hasResults = false;
+        tiles = _dirtyTiles;
+        bool had = _hasResults;
+        _hasResults = false;
         return had;
     }
 }

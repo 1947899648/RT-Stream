@@ -1,48 +1,48 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Threading;
 using UnityEngine;
 
 public class StreamClient : MonoBehaviour
 {
+    public string hostIP;
+    public int port;
+    public RenderTexture displayRT;
+
+    private TcpClient _tcpClient;
+    private NetworkStream _stream;
+    private Thread _receiveThread;
+    private ConcurrentQueue<byte[]> _frameQueue = new ConcurrentQueue<byte[]>();
+    private bool _connected;
+    private bool _running;
+
+    private Texture2D _tex2D;
+    private byte[] _tileBuffer;
+    private bool _initialized;
+    private int _texWidth, _texHeight;
+
     void Awake()
     {
         hostIP = SceneConfig.HostIP;
         port = SceneConfig.Port;
     }
 
-
-    public string hostIP;
-    public int port;
-    public RenderTexture displayRT;
-
-    private TcpClient tcpClient;
-    private NetworkStream stream;
-    private Thread receiveThread;
-    private ConcurrentQueue<byte[]> frameQueue = new ConcurrentQueue<byte[]>();
-    private bool connected;
-    private bool running;
-
-    private Texture2D tex2D;
-    private byte[] tileBuffer;
-    private bool initialized;
-    private int texWidth, texHeight;
-
-    public bool IsConnected => connected;
+    public bool IsConnected => _connected;
 
     public void Connect()
     {
         Disconnect();
         try
         {
-            tcpClient = new TcpClient();
-            tcpClient.Connect(hostIP, port);
-            stream = tcpClient.GetStream();
-            connected = true;
-            running = true;
-            receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
-            receiveThread.Start();
+            _tcpClient = new TcpClient();
+            _tcpClient.Connect(hostIP, port);
+            _stream = _tcpClient.GetStream();
+            _connected = true;
+            _running = true;
+            _receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
+            _receiveThread.Start();
         }
         catch (Exception e)
         {
@@ -53,19 +53,19 @@ public class StreamClient : MonoBehaviour
 
     public void Disconnect()
     {
-        running = false;
-        connected = false;
-        initialized = false;
-        receiveThread?.Join(500);
+        _running = false;
+        _connected = false;
+        _initialized = false;
+        _receiveThread?.Join(500);
         Close();
-        while (frameQueue.TryDequeue(out _)) { }
+        while (_frameQueue.TryDequeue(out _)) { }
     }
 
     void Update()
     {
-        if (!connected) return;
+        if (!_connected) return;
 
-        while (frameQueue.TryDequeue(out var packet))
+        while (_frameQueue.TryDequeue(out byte[] packet))
         {
             ProcessFrame(packet);
         }
@@ -74,24 +74,24 @@ public class StreamClient : MonoBehaviour
     void ReceiveLoop()
     {
         byte[] lenBuf = new byte[4];
-        while (running && tcpClient != null && tcpClient.Connected)
+        while (_running && _tcpClient != null && _tcpClient.Connected)
         {
             try
             {
-                if (!ReadExact(stream, lenBuf, 0, 4)) break;
+                if (!ReadExact(_stream, lenBuf, 0, 4)) break;
                 int frameLen = BitConverter.ToInt32(lenBuf, 0);
                 if (frameLen <= 0 || frameLen > 64 * 1024 * 1024) break;
 
                 byte[] frameData = new byte[frameLen];
-                if (!ReadExact(stream, frameData, 0, frameLen)) break;
-                frameQueue.Enqueue(frameData);
+                if (!ReadExact(_stream, frameData, 0, frameLen)) break;
+                _frameQueue.Enqueue(frameData);
             }
             catch
             {
                 break;
             }
         }
-        connected = false;
+        _connected = false;
     }
 
     bool ReadExact(NetworkStream s, byte[] buf, int offset, int count)
@@ -108,54 +108,54 @@ public class StreamClient : MonoBehaviour
 
     void ProcessFrame(byte[] packet)
     {
-        var type = FrameCodec.GetFrameType(packet);
+        FrameType type = FrameCodec.GetFrameType(packet);
         if (type == FrameType.KeyFrame)
         {
-            FrameCodec.DecodeKeyFrame(packet, out texWidth, out texHeight, out var pixels);
-            tileBuffer = pixels;
+            FrameCodec.DecodeKeyFrame(packet, out _texWidth, out _texHeight, out byte[] pixels);
+            _tileBuffer = pixels;
 
-            if (tex2D != null) Destroy(tex2D);
-            tex2D = new Texture2D(texWidth, texHeight, TextureFormat.RGBA32, false);
-            initialized = true;
+            if (_tex2D != null) Destroy(_tex2D);
+            _tex2D = new Texture2D(_texWidth, _texHeight, TextureFormat.RGBA32, false);
+            _initialized = true;
         }
         else if (type == FrameType.DeltaFrame)
         {
-            if (!initialized) return;
-            var tiles = FrameCodec.DecodeDeltaFrame(packet);
-            int rowLen = texWidth * 4;
+            if (!_initialized) return;
+            List<DirtyTile> tiles = FrameCodec.DecodeDeltaFrame(packet);
+            int rowLen = _texWidth * 4;
 
-            foreach (var tile in tiles)
+            foreach (DirtyTile tile in tiles)
             {
-                int tileX = (tile.index % (texWidth / 16)) * 16;
-                int tileY = (tile.index / (texWidth / 16)) * 16;
+                int tileX = (tile.index % (_texWidth / 16)) * 16;
+                int tileY = (tile.index / (_texWidth / 16)) * 16;
 
                 for (int y = 0; y < 16; y++)
                 {
                     int dstOffset = ((tileY + y) * rowLen) + tileX * 4;
-                    Buffer.BlockCopy(tile.data, y * 16 * 4, tileBuffer, dstOffset, 16 * 4);
+                    Buffer.BlockCopy(tile.data, y * 16 * 4, _tileBuffer, dstOffset, 16 * 4);
                 }
             }
         }
 
-        if (initialized && tileBuffer != null)
+        if (_initialized && _tileBuffer != null)
         {
-            tex2D.LoadRawTextureData(tileBuffer);
-            tex2D.Apply();
-            Graphics.Blit(tex2D, displayRT);
+            _tex2D.LoadRawTextureData(_tileBuffer);
+            _tex2D.Apply();
+            Graphics.Blit(_tex2D, displayRT);
         }
     }
 
     void Close()
     {
-        stream?.Close();
-        tcpClient?.Close();
-        stream = null;
-        tcpClient = null;
+        _stream?.Close();
+        _tcpClient?.Close();
+        _stream = null;
+        _tcpClient = null;
     }
 
     void OnDestroy()
     {
         Disconnect();
-        if (tex2D != null) Destroy(tex2D);
+        if (_tex2D != null) Destroy(_tex2D);
     }
 }
