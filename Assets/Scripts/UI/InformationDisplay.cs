@@ -77,10 +77,9 @@ public class InformationDisplay : MonoBehaviour
 
         if (_host != null)
         {
-            int kf = _host.keyFrameInterval - (_host.DiagSeq % _host.keyFrameInterval);
             _styleSmall.normal.textColor = new Color(0.7f, 1f, 0.7f);
             GUI.Label(new Rect(0, y, Screen.width, 22),
-                $"Clients: {_host.ClientCount}  Port: {_host.port}  Target: {_host.targetFps} FPS  KeyFrame: {kf}/{_host.keyFrameInterval}", _styleSmall);
+                $"Clients: {_host.ClientCount}  Port: {_host.port}", _styleSmall);
         }
         else if (_client != null)
         {

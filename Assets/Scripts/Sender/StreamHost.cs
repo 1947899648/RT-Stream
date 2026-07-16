@@ -8,15 +8,11 @@ using UnityEngine;
 public class StreamHost : MonoBehaviour
 {
     public int port = 7777;
-    public int targetFps = 30;
-    public int keyFrameInterval = 30;
     public ComputeShader tileHashShader;
 
     private TcpListener _listener;
     private List<TcpClient> _clients = new List<TcpClient>();
     private TileDiffer _tileDiffer;
-    private int _seq;
-    private float _timer;
     private Thread _acceptThread;
     private bool _running;
     private int _texWidth, _texHeight;
@@ -25,8 +21,6 @@ public class StreamHost : MonoBehaviour
     {
         get { lock (_clients) return _clients.Count; }
     }
-
-    public int DiagSeq => _seq;
 
     void Start()
     {
@@ -46,26 +40,11 @@ public class StreamHost : MonoBehaviour
     {
         _tileDiffer.Update();
 
-        _timer += Time.deltaTime;
-        float interval = 1f / targetFps;
-        if (_timer < interval) return;
-        _timer -= interval;
-
         if (!_tileDiffer.TryGetDirtyTiles(out List<DirtyTile> dirtyTiles)) return;
         if (dirtyTiles.Count == 0) return;
 
-        byte[] packet;
-        if (_seq % keyFrameInterval == 0)
-        {
-            packet = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, _tileDiffer.LatestRawData);
-        }
-        else
-        {
-            packet = FrameCodec.EncodeDeltaFrame(dirtyTiles);
-        }
-
+        byte[] packet = FrameCodec.EncodeDeltaFrame(dirtyTiles);
         SendToAll(packet);
-        _seq++;
     }
 
     void AcceptLoop()
