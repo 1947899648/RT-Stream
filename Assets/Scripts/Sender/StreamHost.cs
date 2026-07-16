@@ -25,6 +25,8 @@ public class StreamHost : MonoBehaviour
         get { lock (_clients) return _clients.Count; }
     }
 
+    public int DiagSeq => _seq;
+
     void Start()
     {
         DrawingCanvas canvas = FindObjectOfType<DrawingCanvas>();

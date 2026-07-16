@@ -134,7 +134,7 @@ GameObject:
   - component: {fileID: 110365789}
   - component: {fileID: 110365788}
   m_Layer: 0
-  m_Name: FpsDisplay
+  m_Name: InformationDisplay
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -828,10 +828,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fab95f58b67d9634685777206b5987b7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  senderBtn: {fileID: 1913454304}
-  receiverBtn: {fileID: 1539366691}
-  ipInput: {fileID: 208413145}
-  portInput: {fileID: 615803503}
+  _senderBtn: {fileID: 1913454304}
+  _receiverBtn: {fileID: 1539366691}
+  _ipInput: {fileID: 208413145}
+  _portInput: {fileID: 615803503}
 --- !u!4 &1252470419
 Transform:
   m_ObjectHideFlags: 0

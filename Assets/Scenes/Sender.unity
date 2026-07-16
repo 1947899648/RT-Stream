@@ -331,14 +331,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 24e6d27f75d234b4ea9171f1b06d8a6a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  textureWidth: 512
-  textureHeight: 512
+  textureWidth: 2048
+  textureHeight: 2048
   brushColor: {r: 0, g: 0, b: 0, a: 1}
   brushSize: 0.01
-  redBtn: {fileID: 693961233}
-  greenBtn: {fileID: 19204324}
-  blueBtn: {fileID: 1914522322}
-  clearBtn: {fileID: 1675070580}
+  _redBtn: {fileID: 693961233}
+  _greenBtn: {fileID: 19204324}
+  _blueBtn: {fileID: 1914522322}
+  _clearBtn: {fileID: 1675070580}
 --- !u!1 &178861663
 GameObject:
   m_ObjectHideFlags: 0
