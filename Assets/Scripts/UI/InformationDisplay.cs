@@ -22,6 +22,9 @@ public class InformationDisplay : MonoBehaviour
         _styleSmall = new GUIStyle { fontSize = 18, fontStyle = FontStyle.Normal, alignment = TextAnchor.UpperCenter };
 
         SceneManager.sceneLoaded += (scene, mode) => DetectRole();
+
+        QualitySettings.vSyncCount = 0;
+        Application.targetFrameRate = 9999;
     }
 
     void Start()
