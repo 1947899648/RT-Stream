@@ -86,5 +86,35 @@ public class InformationDisplay : MonoBehaviour
             GUI.Label(new Rect(0, y, Screen.width, 22),
                 _client.IsConnected ? $"Connected  {_client.hostIP}:{_client.port}" : "Disconnected", _styleSmall);
         }
+
+        DrawHardwareInfo();
+    }
+
+    void DrawHardwareInfo()
+    {
+        int bottom = Screen.height - 10;
+
+        string memLine = "System RAM: -- MB    VRAM: -- MB";
+        if (SystemInfo.systemMemorySize > 0)
+            memLine = $"System RAM: {SystemInfo.systemMemorySize} MB";
+        if (SystemInfo.graphicsMemorySize > 0)
+            memLine += $"    VRAM: {SystemInfo.graphicsMemorySize} MB";
+
+        _styleSmall.normal.textColor = Color.white;
+        GUI.Label(new Rect(0, bottom - 22, Screen.width, 22), memLine, _styleSmall);
+
+        string cpuLine = string.IsNullOrEmpty(SystemInfo.processorType)
+            ? "CPU: Unknown"
+            : $"CPU: {SystemInfo.processorType}";
+        GUI.Label(new Rect(0, bottom - 44, Screen.width, 22), cpuLine, _styleSmall);
+
+        string gpuLine = $"GPU: {SystemInfo.graphicsDeviceName}  ({SystemInfo.graphicsDeviceType})";
+        _styleSmall.normal.textColor = new Color(0.8f, 0.8f, 1f);
+        GUI.Label(new Rect(0, bottom - 66, Screen.width, 22), gpuLine, _styleSmall);
+
+        bool csSupported = SystemInfo.supportsComputeShaders;
+        _styleLarge.normal.textColor = csSupported ? Color.green : Color.red;
+        GUI.Label(new Rect(0, bottom - 115, Screen.width, 42),
+            csSupported ? "Compute Shader: Supported" : "Compute Shader: Not Supported", _styleLarge);
     }
 }
