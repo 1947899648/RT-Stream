@@ -2,7 +2,6 @@ using UnityEngine;
 
 public class RTLocalSim : MonoBehaviour
 {
-    public RenderTexture targetRT;
     [Range(0.1f, 2f)]
     public float interval = 0.3f;
 
@@ -12,7 +11,7 @@ public class RTLocalSim : MonoBehaviour
 
     void Start()
     {
-        _tempTex = new Texture2D(targetRT.width, targetRT.height, TextureFormat.RGBA32, false);
+        _tempTex = new Texture2D(SceneConfig.DisplayRT.width, SceneConfig.DisplayRT.height, TextureFormat.RGBA32, false);
         _colors = new Color[]
         {
             Color.red, Color.green, Color.blue,
@@ -56,12 +55,11 @@ public class RTLocalSim : MonoBehaviour
 
         _tempTex.SetPixels(pixels);
         _tempTex.Apply();
-        Graphics.Blit(_tempTex, targetRT);
+        Graphics.Blit(_tempTex, SceneConfig.DisplayRT);
     }
 
     void OnDestroy()
     {
-        if (targetRT != null) targetRT.Release();
         if (_tempTex != null) Destroy(_tempTex);
     }
 }

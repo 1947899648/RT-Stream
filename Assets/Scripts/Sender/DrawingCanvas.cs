@@ -5,10 +5,6 @@ using UnityEngine.Serialization;
 [RequireComponent(typeof(RawImage))]
 public class DrawingCanvas : MonoBehaviour
 {
-    [Header("画布")]
-    public int textureWidth = 512;
-    public int textureHeight = 512;
-
     [Header("笔刷")]
     public Color brushColor = Color.black;
     [Range(0.001f, 0.1f)]
@@ -41,11 +37,15 @@ public class DrawingCanvas : MonoBehaviour
 
     void Start()
     {
-        _canvasRT = new RenderTexture(textureWidth, textureHeight, 0, RenderTextureFormat.ARGB32)
+        int size = SceneConfig.TextureSize;
+        if (size < 64) size = 64;
+        if (size > 4096) size = 4096;
+
+        _canvasRT = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32)
         {
             filterMode = FilterMode.Bilinear
         };
-        _tempRT = new RenderTexture(textureWidth, textureHeight, 0, RenderTextureFormat.ARGB32)
+        _tempRT = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32)
         {
             filterMode = FilterMode.Bilinear
         };

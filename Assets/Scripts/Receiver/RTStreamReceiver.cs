@@ -4,19 +4,32 @@ using UnityEngine.Serialization;
 
 public class RTStreamReceiver : MonoBehaviour
 {
-    public RenderTexture displayRT;
     public RTLocalSim localSim;
     public StreamClient streamClient;
     [FormerlySerializedAs("localBtn")]
     [SerializeField] private Button _localBtn;
     [FormerlySerializedAs("webBtn")]
     [SerializeField] private Button _webBtn;
+    [SerializeField] private RawImage _displayImage;
+    [SerializeField] private MeshRenderer _displayMesh;
 
     void Start()
     {
+        int size = SceneConfig.TextureSize;
+        if (size < 64) size = 64;
+        if (size > 4096) size = 4096;
+
+        if (SceneConfig.DisplayRT == null || SceneConfig.DisplayRT.width != size || SceneConfig.DisplayRT.height != size)
+        {
+            if (SceneConfig.DisplayRT != null) SceneConfig.DisplayRT.Release();
+            SceneConfig.DisplayRT = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32);
+        }
+
+        _displayImage.texture = SceneConfig.DisplayRT;
+        _displayMesh.material.mainTexture = SceneConfig.DisplayRT;
+
         _localBtn.onClick.AddListener(SetLocal);
         _webBtn.onClick.AddListener(SetWeb);
-        streamClient.displayRT = displayRT;
         SetLocal();
     }
 
@@ -33,7 +46,7 @@ public class RTStreamReceiver : MonoBehaviour
         _localBtn.interactable = true;
         _webBtn.interactable = false;
         localSim.enabled = false;
-        RenderTexture.active = displayRT;
+        RenderTexture.active = SceneConfig.DisplayRT;
         GL.Clear(true, true, Color.black);
         RenderTexture.active = null;
         streamClient.Connect();

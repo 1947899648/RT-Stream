@@ -152,11 +152,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3a5fb1c763d9df548b1f21e4edde9de5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  displayRT: {fileID: 8400000, guid: b1ce9449bb2f6d2458a2201843f9467e, type: 2}
   localSim: {fileID: 439335095}
   streamClient: {fileID: 249526265}
-  localBtn: {fileID: 147822954}
-  webBtn: {fileID: 387017523}
+  _localBtn: {fileID: 147822954}
+  _webBtn: {fileID: 387017523}
+  _displayImage: {fileID: 1955702333}
+  _displayMesh: {fileID: 519418909}
 --- !u!4 &91305503
 Transform:
   m_ObjectHideFlags: 0
@@ -325,7 +326,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hostIP: 127.0.0.1
   port: 7777
-  displayRT: {fileID: 0}
 --- !u!4 &249526266
 Transform:
   m_ObjectHideFlags: 0
@@ -473,7 +473,6 @@ GameObject:
   m_Component:
   - component: {fileID: 392315876}
   - component: {fileID: 392315875}
-  - component: {fileID: 392315874}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -481,14 +480,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!81 &392315874
-AudioListener:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 392315873}
-  m_Enabled: 1
 --- !u!20 &392315875
 Camera:
   m_ObjectHideFlags: 0
@@ -576,7 +567,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0f062bf0882bb40489fb79fd9f54e0fb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  targetRT: {fileID: 8400000, guid: b1ce9449bb2f6d2458a2201843f9467e, type: 2}
   interval: 0.3
 --- !u!4 &439335096
 Transform:
@@ -1011,7 +1001,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Texture: {fileID: 8400000, guid: b1ce9449bb2f6d2458a2201843f9467e, type: 2}
+  m_Texture: {fileID: 0}
   m_UVRect:
     serializedVersion: 2
     x: 0

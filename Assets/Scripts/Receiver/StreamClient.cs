@@ -9,7 +9,6 @@ public class StreamClient : MonoBehaviour
 {
     public string hostIP;
     public int port;
-    public RenderTexture displayRT;
 
     private TcpClient _tcpClient;
     private NetworkStream _stream;
@@ -141,7 +140,7 @@ public class StreamClient : MonoBehaviour
         {
             _tex2D.LoadRawTextureData(_tileBuffer);
             _tex2D.Apply();
-            Graphics.Blit(_tex2D, displayRT);
+            Graphics.Blit(_tex2D, SceneConfig.DisplayRT);
         }
     }
 

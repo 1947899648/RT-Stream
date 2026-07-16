@@ -56,20 +56,20 @@ public class InformationDisplay : MonoBehaviour
 
         if (_canvas != null)
         {
-            int rtMem = _canvas.textureWidth * _canvas.textureHeight * 4;
-            int tx = _canvas.textureWidth / 16;
-            int ty = _canvas.textureHeight / 16;
+            int size = SceneConfig.TextureSize;
+            int rtMem = size * size * 4;
+            int t = size / 16;
             _styleSmall.normal.textColor = new Color(0.7f, 1f, 0.7f);
             GUI.Label(new Rect(0, y, Screen.width, 22),
-                $"RT: {_canvas.textureWidth}x{_canvas.textureHeight}  RGBA32  {rtMem / 1024f / 1024f:F1} MB  Tile: {tx}x{ty} ({tx * ty})", _styleSmall);
+                $"RT: {size}x{size}  RGBA32  {rtMem / 1024f / 1024f:F1} MB  Tile: {t}x{t} ({t * t})", _styleSmall);
             y += 26;
         }
-        else if (_client != null && _client.displayRT != null)
+        else if (_client != null && SceneConfig.DisplayRT != null)
         {
-            int rtMem = _client.displayRT.width * _client.displayRT.height * 4;
+            int rtMem = SceneConfig.DisplayRT.width * SceneConfig.DisplayRT.height * 4;
             _styleSmall.normal.textColor = new Color(0.7f, 0.7f, 1f);
             GUI.Label(new Rect(0, y, Screen.width, 22),
-                $"RT: {_client.displayRT.width}x{_client.displayRT.height}  {_client.displayRT.format}  {rtMem / 1024f / 1024f:F1} MB", _styleSmall);
+                $"RT: {SceneConfig.DisplayRT.width}x{SceneConfig.DisplayRT.height}  {SceneConfig.DisplayRT.format}  {rtMem / 1024f / 1024f:F1} MB", _styleSmall);
             y += 26;
         }
 

@@ -30,8 +30,8 @@ public class StreamHost : MonoBehaviour
     void Start()
     {
         DrawingCanvas canvas = FindObjectOfType<DrawingCanvas>();
-        _texWidth = canvas.textureWidth;
-        _texHeight = canvas.textureHeight;
+        _texWidth = SceneConfig.TextureSize;
+        _texHeight = SceneConfig.TextureSize;
         _tileDiffer = new TileDiffer(canvas.CanvasTexture);
 
         _listener = new TcpListener(IPAddress.Any, port);
