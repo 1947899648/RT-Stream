@@ -1,3 +1,4 @@
+using System.Text;
 using UnityEngine;
 
 public class InformationDisplay : MonoBehaviour
@@ -11,6 +12,7 @@ public class InformationDisplay : MonoBehaviour
     private GUIStyle _styleLarge;
     private GUIStyle _styleSmall;
     private GUIStyle _styleBottom;
+    private StringBuilder _sb = new StringBuilder(256);
 
     void Awake()
     {
@@ -49,7 +51,9 @@ public class InformationDisplay : MonoBehaviour
         int y = 20;
 
         _styleLarge.normal.textColor = Color.green;
-        GUI.Label(new Rect(0, y, Screen.width, 42), $"{fps:0} FPS ({ms:0.0} ms)", _styleLarge);
+        _sb.Clear();
+        _sb.AppendFormat("{0:0} FPS ({1:0.0} ms)", fps, ms);
+        GUI.Label(new Rect(0, y, Screen.width, 42), _sb.ToString(), _styleLarge);
         y += 46;
 
         _styleSmall.normal.textColor = Color.white;
@@ -62,35 +66,44 @@ public class InformationDisplay : MonoBehaviour
             int rtMem = size * size * 4;
             int t = size / 16;
             _styleSmall.normal.textColor = new Color(0.7f, 1f, 0.7f);
-            GUI.Label(new Rect(0, y, Screen.width, 22),
-                $"RT: {size}x{size}  RGBA32  {rtMem / 1024f / 1024f:F1} MB  Tile: {t}x{t} ({t * t})", _styleSmall);
+            _sb.Clear();
+            _sb.AppendFormat("RT: {0}x{0}  RGBA32  {1:F1} MB  Tile: {2}x{2} ({3})",
+                size, rtMem / 1024f / 1024f, t, t * t);
+            GUI.Label(new Rect(0, y, Screen.width, 22), _sb.ToString(), _styleSmall);
             y += 26;
         }
         else if (_client != null && SceneConfig.DisplayRT != null)
         {
             int rtMem = SceneConfig.DisplayRT.width * SceneConfig.DisplayRT.height * 4;
             _styleSmall.normal.textColor = new Color(0.7f, 0.7f, 1f);
-            GUI.Label(new Rect(0, y, Screen.width, 22),
-                $"RT: {SceneConfig.DisplayRT.width}x{SceneConfig.DisplayRT.height}  {SceneConfig.DisplayRT.format}  {rtMem / 1024f / 1024f:F1} MB", _styleSmall);
+            _sb.Clear();
+            _sb.AppendFormat("RT: {0}x{1}  {2}  {3:F1} MB",
+                SceneConfig.DisplayRT.width, SceneConfig.DisplayRT.height,
+                SceneConfig.DisplayRT.format, rtMem / 1024f / 1024f);
+            GUI.Label(new Rect(0, y, Screen.width, 22), _sb.ToString(), _styleSmall);
             y += 26;
         }
 
         if (_host != null)
         {
             _styleSmall.normal.textColor = new Color(0.7f, 1f, 0.7f);
-            GUI.Label(new Rect(0, y, Screen.width, 22),
-                $"Clients: {_host.ClientCount}  Port: {_host.port}", _styleSmall);
+            _sb.Clear();
+            _sb.AppendFormat("Clients: {0}  Port: {1}", _host.ClientCount, _host.port);
+            GUI.Label(new Rect(0, y, Screen.width, 22), _sb.ToString(), _styleSmall);
         }
         else if (_client != null)
         {
             _styleSmall.normal.textColor = _client.IsConnected ? Color.green : Color.red;
-            GUI.Label(new Rect(0, y, Screen.width, 22),
-                _client.IsConnected ? $"Connected  {_client.hostIP}:{_client.port}" : "Disconnected", _styleSmall);
+            _sb.Clear();
+            _sb.AppendFormat(_client.IsConnected ? "Connected  {0}:{1}" : "Disconnected",
+                _client.hostIP, _client.port);
+            GUI.Label(new Rect(0, y, Screen.width, 22), _sb.ToString(), _styleSmall);
         }
 
         bool csSupported = SystemInfo.supportsComputeShaders;
-        string csInfo = csSupported ? "ComputeShader: supported" : "ComputeShader: not supported";
+        _sb.Clear();
+        _sb.Append(csSupported ? "ComputeShader: supported" : "ComputeShader: not supported");
         _styleBottom.normal.textColor = csSupported ? Color.green : Color.red;
-        GUI.Label(new Rect(0, Screen.height - 30, Screen.width, 22), csInfo, _styleBottom);
+        GUI.Label(new Rect(0, Screen.height - 30, Screen.width, 22), _sb.ToString(), _styleBottom);
     }
 }

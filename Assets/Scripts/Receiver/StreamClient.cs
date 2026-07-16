@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using UnityEngine;
 
@@ -21,6 +22,9 @@ public class StreamClient : MonoBehaviour
     private byte[] _tileBuffer;
     private bool _initialized;
     private int _texWidth, _texHeight;
+
+    private byte[] _recvBuffer;
+    private int _recvSize;
 
     void Awake()
     {
@@ -81,8 +85,16 @@ public class StreamClient : MonoBehaviour
                 int frameLen = BitConverter.ToInt32(lenBuf, 0);
                 if (frameLen <= 0 || frameLen > 64 * 1024 * 1024) break;
 
+                if (_recvSize < frameLen)
+                {
+                    _recvBuffer = new byte[frameLen];
+                    _recvSize = frameLen;
+                }
+
+                if (!ReadExact(_stream, _recvBuffer, 0, frameLen)) break;
+
                 byte[] frameData = new byte[frameLen];
-                if (!ReadExact(_stream, frameData, 0, frameLen)) break;
+                Buffer.BlockCopy(_recvBuffer, 0, frameData, 0, frameLen);
                 _frameQueue.Enqueue(frameData);
             }
             catch

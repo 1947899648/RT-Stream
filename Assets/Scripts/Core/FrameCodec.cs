@@ -18,39 +18,51 @@ public static class FrameCodec
     private const int HeaderSize = 7;
     private const int TileSize = 1024;
 
+    private static byte[] _packetBuffer;
+    private static int _packetSize;
+
     public static byte[] EncodeDeltaFrame(List<DirtyTile> tiles)
     {
         int payloadLen = tiles.Count * (4 + TileSize);
-        byte[] packet = new byte[HeaderSize + payloadLen];
+        int needed = HeaderSize + payloadLen;
+        EnsurePacketCapacity(needed);
 
-        packet[0] = (byte)FrameType.DeltaFrame;
-        BitConverter.GetBytes((ushort)tiles.Count).CopyTo(packet, 1);
-        BitConverter.GetBytes((uint)payloadLen).CopyTo(packet, 3);
+        _packetBuffer[0] = (byte)FrameType.DeltaFrame;
+        BitConverter.GetBytes((ushort)tiles.Count).CopyTo(_packetBuffer, 1);
+        BitConverter.GetBytes((uint)payloadLen).CopyTo(_packetBuffer, 3);
 
         int pos = HeaderSize;
         foreach (DirtyTile tile in tiles)
         {
-            BitConverter.GetBytes(tile.index).CopyTo(packet, pos);
-            Buffer.BlockCopy(tile.data, 0, packet, pos + 4, TileSize);
+            BitConverter.GetBytes(tile.index).CopyTo(_packetBuffer, pos);
+            Buffer.BlockCopy(tile.data, 0, _packetBuffer, pos + 4, TileSize);
             pos += 4 + TileSize;
         }
-        return packet;
+        return _packetBuffer;
     }
 
     public static byte[] EncodeKeyFrame(int width, int height, byte[] pixels)
     {
         int payloadLen = 8 + pixels.Length;
-        byte[] packet = new byte[HeaderSize + payloadLen];
+        int needed = HeaderSize + payloadLen;
+        EnsurePacketCapacity(needed);
 
-        packet[0] = (byte)FrameType.KeyFrame;
-        BitConverter.GetBytes((ushort)0).CopyTo(packet, 1);
-        BitConverter.GetBytes((uint)payloadLen).CopyTo(packet, 3);
+        _packetBuffer[0] = (byte)FrameType.KeyFrame;
+        BitConverter.GetBytes((ushort)0).CopyTo(_packetBuffer, 1);
+        BitConverter.GetBytes((uint)payloadLen).CopyTo(_packetBuffer, 3);
 
-        BitConverter.GetBytes(width).CopyTo(packet, HeaderSize);
-        BitConverter.GetBytes(height).CopyTo(packet, HeaderSize + 4);
-        Buffer.BlockCopy(pixels, 0, packet, HeaderSize + 8, pixels.Length);
+        BitConverter.GetBytes(width).CopyTo(_packetBuffer, HeaderSize);
+        BitConverter.GetBytes(height).CopyTo(_packetBuffer, HeaderSize + 4);
+        Buffer.BlockCopy(pixels, 0, _packetBuffer, HeaderSize + 8, pixels.Length);
 
-        return packet;
+        return _packetBuffer;
+    }
+
+    private static void EnsurePacketCapacity(int needed)
+    {
+        if (_packetSize >= needed) return;
+        _packetBuffer = new byte[needed];
+        _packetSize = needed;
     }
 
     public static FrameType GetFrameType(byte[] packet)

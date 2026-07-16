@@ -17,6 +17,9 @@ public class StreamHost : MonoBehaviour
     private bool _running;
     private int _texWidth, _texHeight;
 
+    private byte[] _prefixedBuffer;
+    private int _prefixedSize;
+
     public int ClientCount
     {
         get { lock (_clients) return _clients.Count; }
@@ -77,11 +80,21 @@ public class StreamHost : MonoBehaviour
         }
     }
 
+    void BuildPrefixedBuffer(byte[] data)
+    {
+        int needed = 4 + data.Length;
+        if (_prefixedSize < needed)
+        {
+            _prefixedBuffer = new byte[needed];
+            _prefixedSize = needed;
+        }
+        BitConverter.GetBytes(data.Length).CopyTo(_prefixedBuffer, 0);
+        Buffer.BlockCopy(data, 0, _prefixedBuffer, 4, data.Length);
+    }
+
     void SendToAll(byte[] data)
     {
-        byte[] prefixed = new byte[4 + data.Length];
-        BitConverter.GetBytes(data.Length).CopyTo(prefixed, 0);
-        Buffer.BlockCopy(data, 0, prefixed, 4, data.Length);
+        BuildPrefixedBuffer(data);
 
         lock (_clients)
         {
@@ -89,7 +102,7 @@ public class StreamHost : MonoBehaviour
             {
                 try
                 {
-                    _clients[i].GetStream().Write(prefixed, 0, prefixed.Length);
+                    _clients[i].GetStream().Write(_prefixedBuffer, 0, _prefixedSize);
                 }
                 catch
                 {
@@ -104,10 +117,8 @@ public class StreamHost : MonoBehaviour
     {
         try
         {
-            byte[] prefixed = new byte[4 + data.Length];
-            BitConverter.GetBytes(data.Length).CopyTo(prefixed, 0);
-            Buffer.BlockCopy(data, 0, prefixed, 4, data.Length);
-            client.GetStream().Write(prefixed, 0, prefixed.Length);
+            BuildPrefixedBuffer(data);
+            client.GetStream().Write(_prefixedBuffer, 0, _prefixedSize);
         }
         catch { }
     }

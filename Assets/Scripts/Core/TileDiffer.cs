@@ -7,6 +7,7 @@ using UnityEngine.Rendering;
 public class TileDiffer
 {
     public const int TILE_SIZE = 16;
+    public static readonly int TILE_BYTES = TILE_SIZE * TILE_SIZE * 4;
     public RenderTexture RT { get; private set; }
 
     private int _tilesX, _tilesY;
@@ -24,8 +25,10 @@ public class TileDiffer
     private ComputeBuffer _dirtyFlagBuffer;
     private bool _pingPong;
 
+    private byte[][] _tileBuffers;
     private List<DirtyTile> _dirtyTiles = new List<DirtyTile>();
     private byte[] _rawData;
+    private int _rawDataSize;
     private bool _hasResults;
     private bool _requestInFlight;
     private bool _fullRTReady;
@@ -44,26 +47,26 @@ public class TileDiffer
         _tilesY = rt.height / TILE_SIZE;
         _totalTiles = _tilesX * _tilesY;
 
+        _tileBuffers = new byte[_totalTiles][];
+        for (int i = 0; i < _totalTiles; i++)
+            _tileBuffers[i] = new byte[TILE_BYTES];
+
         _useGPU = SystemInfo.supportsComputeShaders && SystemInfo.supportsAsyncGPUReadback && computeShader != null;
         if (_useGPU)
         {
             _computeShader = computeShader;
-
-            if (_useGPU)
-            {
-                _hashKernel = _computeShader.FindKernel("ComputeHashes");
-                _prevHashLowA = new ComputeBuffer(_totalTiles, sizeof(uint));
-                _prevHashHighA = new ComputeBuffer(_totalTiles, sizeof(uint));
-                _prevHashLowB = new ComputeBuffer(_totalTiles, sizeof(uint));
-                _prevHashHighB = new ComputeBuffer(_totalTiles, sizeof(uint));
-                _currHashLowA = new ComputeBuffer(_totalTiles, sizeof(uint));
-                _currHashHighA = new ComputeBuffer(_totalTiles, sizeof(uint));
-                _currHashLowB = new ComputeBuffer(_totalTiles, sizeof(uint));
-                _currHashHighB = new ComputeBuffer(_totalTiles, sizeof(uint));
-                _dirtyFlagBuffer = new ComputeBuffer(_totalTiles, sizeof(uint));
-                _dirtyFlags = new uint[_totalTiles];
-                return;
-            }
+            _hashKernel = _computeShader.FindKernel("ComputeHashes");
+            _prevHashLowA = new ComputeBuffer(_totalTiles, sizeof(uint));
+            _prevHashHighA = new ComputeBuffer(_totalTiles, sizeof(uint));
+            _prevHashLowB = new ComputeBuffer(_totalTiles, sizeof(uint));
+            _prevHashHighB = new ComputeBuffer(_totalTiles, sizeof(uint));
+            _currHashLowA = new ComputeBuffer(_totalTiles, sizeof(uint));
+            _currHashHighA = new ComputeBuffer(_totalTiles, sizeof(uint));
+            _currHashLowB = new ComputeBuffer(_totalTiles, sizeof(uint));
+            _currHashHighB = new ComputeBuffer(_totalTiles, sizeof(uint));
+            _dirtyFlagBuffer = new ComputeBuffer(_totalTiles, sizeof(uint));
+            _dirtyFlags = new uint[_totalTiles];
+            return;
         }
 
         _prevHashes = new ulong[_totalTiles];
@@ -129,8 +132,13 @@ public class TileDiffer
         if (request.hasError) return;
 
         NativeArray<byte> data = request.GetData<byte>();
-        _rawData = new byte[data.Length];
-        data.CopyTo(_rawData);
+        int len = data.Length;
+        if (_rawData == null || _rawDataSize != len)
+        {
+            _rawData = new byte[len];
+            _rawDataSize = len;
+        }
+        NativeArray<byte>.Copy(data, _rawData, len);
         _fullRTReady = true;
         TryBuild();
     }
@@ -151,7 +159,6 @@ public class TileDiffer
     {
         _dirtyTiles.Clear();
         int rowBytes = _tilesX * TILE_SIZE * 4;
-        int tileBytes = TILE_SIZE * TILE_SIZE * 4;
 
         for (int idx = 0; idx < _totalTiles; idx++)
         {
@@ -161,13 +168,13 @@ public class TileDiffer
             int ty = idx / _tilesX;
             int srcStart = ty * TILE_SIZE * rowBytes + tx * TILE_SIZE * 4;
 
-            byte[] tileData = new byte[tileBytes];
+            byte[] buf = _tileBuffers[idx];
             for (int y = 0; y < TILE_SIZE; y++)
             {
                 int srcRow = srcStart + y * rowBytes;
-                Buffer.BlockCopy(_rawData, srcRow, tileData, y * TILE_SIZE * 4, TILE_SIZE * 4);
+                Buffer.BlockCopy(_rawData, srcRow, buf, y * TILE_SIZE * 4, TILE_SIZE * 4);
             }
-            _dirtyTiles.Add(new DirtyTile { index = idx, data = tileData });
+            _dirtyTiles.Add(new DirtyTile { index = idx, data = buf });
         }
 
         _pingPong = !_pingPong;
@@ -177,7 +184,6 @@ public class TileDiffer
     {
         _dirtyTiles.Clear();
         int rowBytes = _tilesX * TILE_SIZE * 4;
-        int tileBytes = TILE_SIZE * TILE_SIZE * 4;
 
         for (int ty = 0; ty < _tilesY; ty++)
         {
@@ -186,18 +192,18 @@ public class TileDiffer
                 int idx = ty * _tilesX + tx;
                 int srcStart = ty * TILE_SIZE * rowBytes + tx * TILE_SIZE * 4;
 
-                byte[] tileData = new byte[tileBytes];
+                byte[] buf = _tileBuffers[idx];
                 for (int y = 0; y < TILE_SIZE; y++)
                 {
                     int srcRow = srcStart + y * rowBytes;
-                    Buffer.BlockCopy(_rawData, srcRow, tileData, y * TILE_SIZE * 4, TILE_SIZE * 4);
+                    Buffer.BlockCopy(_rawData, srcRow, buf, y * TILE_SIZE * 4, TILE_SIZE * 4);
                 }
 
-                ulong hash = FastHash.Compute(tileData, 0, tileBytes);
+                ulong hash = FastHash.Compute(buf, 0, TILE_BYTES);
                 if (hash != _prevHashes[idx])
                 {
                     _prevHashes[idx] = hash;
-                    _dirtyTiles.Add(new DirtyTile { index = idx, data = tileData });
+                    _dirtyTiles.Add(new DirtyTile { index = idx, data = buf });
                 }
             }
         }
