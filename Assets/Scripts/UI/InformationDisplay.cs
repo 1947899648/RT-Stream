@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class InformationDisplay : MonoBehaviour
 {
@@ -19,9 +20,16 @@ public class InformationDisplay : MonoBehaviour
 
         _styleLarge = new GUIStyle { fontSize = 36, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter };
         _styleSmall = new GUIStyle { fontSize = 18, fontStyle = FontStyle.Normal, alignment = TextAnchor.UpperCenter };
+
+        SceneManager.sceneLoaded += (scene, mode) => DetectRole();
     }
 
     void Start()
+    {
+        DetectRole();
+    }
+
+    void DetectRole()
     {
         _canvas = FindObjectOfType<DrawingCanvas>();
         _host = FindObjectOfType<StreamHost>();
