@@ -331,8 +331,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 24e6d27f75d234b4ea9171f1b06d8a6a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  textureWidth: 2048
-  textureHeight: 2048
   brushColor: {r: 0, g: 0, b: 0, a: 1}
   brushSize: 0.01
   _redBtn: {fileID: 693961233}
@@ -833,6 +831,7 @@ MonoBehaviour:
   port: 7777
   targetFps: 30
   keyFrameInterval: 30
+  tileHashShader: {fileID: 7200000, guid: 5123335c3099ab24c8e3291b454aea1c, type: 3}
 --- !u!4 &1285881411
 Transform:
   m_ObjectHideFlags: 0

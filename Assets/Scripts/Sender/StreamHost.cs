@@ -10,6 +10,7 @@ public class StreamHost : MonoBehaviour
     public int port = 7777;
     public int targetFps = 30;
     public int keyFrameInterval = 30;
+    public ComputeShader tileHashShader;
 
     private TcpListener _listener;
     private List<TcpClient> _clients = new List<TcpClient>();
@@ -32,7 +33,7 @@ public class StreamHost : MonoBehaviour
         DrawingCanvas canvas = FindObjectOfType<DrawingCanvas>();
         _texWidth = SceneConfig.TextureSize;
         _texHeight = SceneConfig.TextureSize;
-        _tileDiffer = new TileDiffer(canvas.CanvasTexture);
+        _tileDiffer = new TileDiffer(canvas.CanvasTexture, tileHashShader);
 
         _listener = new TcpListener(IPAddress.Any, port);
         _listener.Start();
@@ -144,5 +145,6 @@ public class StreamHost : MonoBehaviour
         }
 
         _acceptThread?.Join(1000);
+        _tileDiffer.Release();
     }
 }

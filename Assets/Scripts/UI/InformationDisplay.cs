@@ -10,6 +10,7 @@ public class InformationDisplay : MonoBehaviour
     private string _role;
     private GUIStyle _styleLarge;
     private GUIStyle _styleSmall;
+    private GUIStyle _styleBottom;
 
     void Awake()
     {
@@ -19,6 +20,7 @@ public class InformationDisplay : MonoBehaviour
 
         _styleLarge = new GUIStyle { fontSize = 36, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperCenter };
         _styleSmall = new GUIStyle { fontSize = 18, fontStyle = FontStyle.Normal, alignment = TextAnchor.UpperCenter };
+        _styleBottom = new GUIStyle { fontSize = 16, fontStyle = FontStyle.Normal, alignment = TextAnchor.LowerCenter };
     }
 
     void Start()
@@ -86,5 +88,10 @@ public class InformationDisplay : MonoBehaviour
             GUI.Label(new Rect(0, y, Screen.width, 22),
                 _client.IsConnected ? $"Connected  {_client.hostIP}:{_client.port}" : "Disconnected", _styleSmall);
         }
+
+        bool csSupported = SystemInfo.supportsComputeShaders;
+        string csInfo = csSupported ? "ComputeShader: supported" : "ComputeShader: not supported";
+        _styleBottom.normal.textColor = csSupported ? Color.green : Color.red;
+        GUI.Label(new Rect(0, Screen.height - 30, Screen.width, 22), csInfo, _styleBottom);
     }
 }

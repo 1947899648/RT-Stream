@@ -1,0 +1,54 @@
+#pragma kernel ComputeHashes
+
+Texture2D<float4> _SourceTex;
+uint _TilesX;
+uint _TilesY;
+uint _TileSize;
+StructuredBuffer<uint> _PrevHashLow;
+StructuredBuffer<uint> _PrevHashHigh;
+RWStructuredBuffer<uint> _CurrHashLow;
+RWStructuredBuffer<uint> _CurrHashHigh;
+RWStructuredBuffer<uint> _DirtyFlags;
+
+static const uint OFFSET_LOW = 0x6C62272E;
+static const uint OFFSET_HIGH = 0x07BB0115;
+
+[numthreads(64, 1, 1)]
+void ComputeHashes(uint3 id : SV_DispatchThreadID)
+{
+    uint tileIdx = id.x;
+    uint total = _TilesX * _TilesY;
+    if (tileIdx >= total) return;
+
+    uint tileX = tileIdx % _TilesX;
+    uint tileY = tileIdx / _TilesX;
+
+    uint baseX = tileX * _TileSize;
+    uint baseY = tileY * _TileSize;
+
+    uint hLow = OFFSET_LOW;
+    uint hHigh = OFFSET_HIGH;
+
+    for (uint y = 0; y < _TileSize; y++)
+    {
+        for (uint x = 0; x < _TileSize; x++)
+        {
+            float4 c = _SourceTex.Load(int3(baseX + x, baseY + y, 0));
+            uint4 b = uint4(c * 255.0 + 0.5);
+            uint v = (b.r) | (b.g << 8) | (b.b << 16) | (b.a << 24);
+
+            hLow ^= v;
+            hLow = (hLow << 7) | (hLow >> 25);
+            hHigh ^= v;
+            hHigh = (hHigh << 13) | (hHigh >> 19);
+        }
+    }
+
+    _CurrHashLow[tileIdx] = hLow;
+    _CurrHashHigh[tileIdx] = hHigh;
+
+    uint d = 0;
+    if (hLow != _PrevHashLow[tileIdx] || hHigh != _PrevHashHigh[tileIdx])
+        d = 1;
+    _DirtyFlags[tileIdx] = d;
+}
