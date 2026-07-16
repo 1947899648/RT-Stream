@@ -6,8 +6,15 @@ using UnityEngine;
 
 public class StreamClient : MonoBehaviour
 {
-    public string hostIP = "127.0.0.1";
-    public int port = 7777;
+    void Awake()
+    {
+        hostIP = SceneConfig.HostIP;
+        port = SceneConfig.Port;
+    }
+
+
+    public string hostIP;
+    public int port;
     public RenderTexture displayRT;
 
     private TcpClient tcpClient;

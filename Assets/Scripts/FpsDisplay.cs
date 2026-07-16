@@ -27,10 +27,11 @@ public class FpsDisplay : MonoBehaviour
         float ms = deltaTime * 1000f;
 
         GUIStyle style = new GUIStyle();
-        style.fontSize = 20;
+        style.fontSize = 40;
         style.normal.textColor = Color.green;
         style.fontStyle = FontStyle.Bold;
+        style.alignment = TextAnchor.UpperCenter;
 
-        GUI.Label(new Rect(10, 10, 200, 30), $"{fps:0.} FPS ({ms:0.0} ms)", style);
+        GUI.Label(new Rect(0, 20, Screen.width, 50), $"{fps:0.} FPS ({ms:0.0} ms)", style);
     }
 }
