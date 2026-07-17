@@ -1,0 +1,59 @@
+#pragma kernel KApplyFull
+#pragma kernel KApplyDelta
+
+RWTexture2D<float4> _OutRT;
+ByteAddressBuffer _Payload;
+
+int _TexWidth;
+int _TexHeight;
+int _TileSize;
+int _TilesX;
+int _FlipY;
+
+#define THREADS 8
+
+float4 UnpackPixel(uint p)
+{
+    return float4(p & 0xFF, (p >> 8) & 0xFF, (p >> 16) & 0xFF, (p >> 24) & 0xFF) / 255.0;
+}
+
+uint2 FlipCoord(uint2 xy)
+{
+    if (_FlipY != 0) xy.y = (uint)_TexHeight - 1 - xy.y;
+    return xy;
+}
+
+[numthreads(THREADS, THREADS, 1)]
+void KApplyFull(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_TexWidth || id.y >= (uint)_TexHeight) return;
+    uint pixel = _Payload.Load(4 * (id.y * _TexWidth + id.x));
+    _OutRT[FlipCoord(id.xy)] = UnpackPixel(pixel);
+}
+
+[numthreads(THREADS, THREADS, 1)]
+void KApplyDelta(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
+{
+    uint tileBytes = (uint)(_TileSize * _TileSize * 4);
+    uint recStride = 4 + tileBytes;
+    uint recOff = gid.x * recStride;
+    uint tileIndex = _Payload.Load(recOff);
+
+    uint tileX = (tileIndex % (uint)_TilesX) * (uint)_TileSize;
+    uint tileY = (tileIndex / (uint)_TilesX) * (uint)_TileSize;
+
+    uint stride = (uint)_TileSize / THREADS;
+    uint lx = gtid.x * stride;
+    uint ly = gtid.y * stride;
+
+    for (uint y = 0; y < stride; y++)
+    {
+        for (uint x = 0; x < stride; x++)
+        {
+            uint px = lx + x;
+            uint py = ly + y;
+            uint pixel = _Payload.Load(recOff + 4 + 4 * (py * (uint)_TileSize + px));
+            _OutRT[FlipCoord(uint2(tileX + px, tileY + py))] = UnpackPixel(pixel);
+        }
+    }
+}

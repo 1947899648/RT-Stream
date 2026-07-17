@@ -15,7 +15,7 @@ public enum FrameType : byte
 
 public static class FrameCodec
 {
-    private const int HeaderSize = 7;
+    public const int HeaderSize = 7;
     private static int TileBytes => SceneConfig.TileSize * SceneConfig.TileSize * 4;
 
     public static byte[] EncodeDeltaFrame(List<DirtyTile> tiles)

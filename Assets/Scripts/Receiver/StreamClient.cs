@@ -9,6 +9,7 @@ public class StreamClient : MonoBehaviour
 {
     public string hostIP;
     public int port;
+    [SerializeField] private ComputeShader _tileApplyShader;
 
     private TcpClient _tcpClient;
     private NetworkStream _stream;
@@ -25,6 +26,10 @@ public class StreamClient : MonoBehaviour
     private int _skippedFrames;
     private int _lastBatchSize;
 
+    private bool _useGpuApply;
+    private ComputeBuffer _payloadBuffer;
+    private int _kApplyFull, _kApplyDelta;
+
     void Awake()
     {
         hostIP = SceneConfig.HostIP;
@@ -34,12 +39,21 @@ public class StreamClient : MonoBehaviour
     public bool IsConnected => _connected;
     public int SkippedFrames => _skippedFrames;
     public int LastBatchSize => _lastBatchSize;
+    public string ApplyBackend => _useGpuApply ? "GPU" : "CPU";
 
     public void Connect()
     {
         Disconnect();
         _skippedFrames = 0;
         _lastBatchSize = 0;
+
+        _useGpuApply = SystemInfo.supportsComputeShaders && _tileApplyShader != null;
+        if (_useGpuApply)
+        {
+            _kApplyFull = _tileApplyShader.FindKernel("KApplyFull");
+            _kApplyDelta = _tileApplyShader.FindKernel("KApplyDelta");
+        }
+
         try
         {
             _tcpClient = new TcpClient();
@@ -66,6 +80,7 @@ public class StreamClient : MonoBehaviour
         Close();
         while (_frameQueue.TryDequeue(out _)) { }
         _batch.Clear();
+        ReleasePayloadBuffer();
     }
 
     void Update()
@@ -94,7 +109,7 @@ public class StreamClient : MonoBehaviour
 
         _batch.Clear();
 
-        if (_initialized && _tileBuffer != null)
+        if (!_useGpuApply && _initialized && _tileBuffer != null)
         {
             _tex2D.LoadRawTextureData(_tileBuffer);
             _tex2D.Apply();
@@ -140,6 +155,8 @@ public class StreamClient : MonoBehaviour
     void ApplyPacket(byte[] packet)
     {
         FrameType type = FrameCodec.GetFrameType(packet);
+        if (_useGpuApply && TryApplyGpu(packet, type)) return;
+
         if (type == FrameType.KeyFrame)
         {
             FrameCodec.DecodeKeyFrame(packet, out int width, out int height, out byte[] pixels);
@@ -178,6 +195,98 @@ public class StreamClient : MonoBehaviour
         }
     }
 
+    bool TryApplyGpu(byte[] packet, FrameType type)
+    {
+        RenderTexture rt = SceneConfig.DisplayRT;
+        if (rt == null || !rt.enableRandomWrite)
+        {
+            _useGpuApply = false;
+            ReleasePayloadBuffer();
+            return false;
+        }
+
+        if (type == FrameType.KeyFrame)
+        {
+            int width = BitConverter.ToInt32(packet, FrameCodec.HeaderSize);
+            int height = BitConverter.ToInt32(packet, FrameCodec.HeaderSize + 4);
+
+            if (width != rt.width || height != rt.height)
+            {
+                _useGpuApply = false;
+                ReleasePayloadBuffer();
+                return false;
+            }
+
+            EnsurePayloadBuffer(width, height);
+            int pixelBytes = width * height * 4;
+            _payloadBuffer.SetData(packet, FrameCodec.HeaderSize + 8, 0, pixelBytes);
+
+            SetGpuParams(width, height);
+            _tileApplyShader.SetBuffer(_kApplyFull, "_Payload", _payloadBuffer);
+            _tileApplyShader.SetTexture(_kApplyFull, "_OutRT", rt);
+            _tileApplyShader.Dispatch(_kApplyFull, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+
+            _texWidth = width;
+            _texHeight = height;
+            _initialized = true;
+            return true;
+        }
+
+        if (type == FrameType.DeltaFrame)
+        {
+            if (!_initialized) return true;
+
+            int tileCount = BitConverter.ToUInt16(packet, 1);
+            if (tileCount == 0) return true;
+
+            int payloadLen = packet.Length - FrameCodec.HeaderSize;
+            EnsurePayloadBuffer(_texWidth, _texHeight);
+            if (payloadLen > _payloadBuffer.count * 4) return true;
+
+            _payloadBuffer.SetData(packet, FrameCodec.HeaderSize, 0, payloadLen);
+
+            SetGpuParams(_texWidth, _texHeight);
+            _tileApplyShader.SetBuffer(_kApplyDelta, "_Payload", _payloadBuffer);
+            _tileApplyShader.SetTexture(_kApplyDelta, "_OutRT", rt);
+            _tileApplyShader.Dispatch(_kApplyDelta, tileCount, 1, 1);
+            return true;
+        }
+
+        return false;
+    }
+
+    void SetGpuParams(int width, int height)
+    {
+        int tileSize = SceneConfig.TileSize;
+        if (tileSize > width) tileSize = width;
+
+        _tileApplyShader.SetInt("_TexWidth", width);
+        _tileApplyShader.SetInt("_TexHeight", height);
+        _tileApplyShader.SetInt("_TileSize", tileSize);
+        _tileApplyShader.SetInt("_TilesX", width / tileSize);
+        _tileApplyShader.SetInt("_FlipY", 0);
+    }
+
+    void EnsurePayloadBuffer(int width, int height)
+    {
+        int tileSize = SceneConfig.TileSize;
+        if (tileSize > width) tileSize = width;
+        int tileBytes = tileSize * tileSize * 4;
+        int tileCount = (width / tileSize) * (height / tileSize);
+        int capBytes = tileCount * (4 + tileBytes);
+
+        if (_payloadBuffer != null && _payloadBuffer.count * 4 >= capBytes) return;
+
+        ReleasePayloadBuffer();
+        _payloadBuffer = new ComputeBuffer(capBytes / 4, 4, ComputeBufferType.Raw);
+    }
+
+    void ReleasePayloadBuffer()
+    {
+        _payloadBuffer?.Release();
+        _payloadBuffer = null;
+    }
+
     void Close()
     {
         _stream?.Close();
@@ -190,5 +299,6 @@ public class StreamClient : MonoBehaviour
     {
         Disconnect();
         if (_tex2D != null) Destroy(_tex2D);
+        ReleasePayloadBuffer();
     }
 }

@@ -19,10 +19,14 @@ public class RTStreamReceiver : MonoBehaviour
         if (size < 64) size = 64;
         if (size > 4096) size = 4096;
 
-        if (SceneConfig.DisplayRT == null || SceneConfig.DisplayRT.width != size || SceneConfig.DisplayRT.height != size)
+        if (SceneConfig.DisplayRT == null || SceneConfig.DisplayRT.width != size || SceneConfig.DisplayRT.height != size
+            || !SceneConfig.DisplayRT.enableRandomWrite)
         {
             if (SceneConfig.DisplayRT != null) SceneConfig.DisplayRT.Release();
-            SceneConfig.DisplayRT = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32);
+            SceneConfig.DisplayRT = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32)
+            {
+                enableRandomWrite = true
+            };
         }
 
         _displayImage.texture = SceneConfig.DisplayRT;

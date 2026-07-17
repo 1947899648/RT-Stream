@@ -326,6 +326,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   hostIP: 127.0.0.1
   port: 7777
+  _tileApplyShader: {fileID: 7200000, guid: f31d91e996ff32e459f0b6c9dca82207, type: 3}
 --- !u!4 &249526266
 Transform:
   m_ObjectHideFlags: 0
