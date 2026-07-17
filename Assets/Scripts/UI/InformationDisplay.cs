@@ -87,9 +87,10 @@ public class InformationDisplay : MonoBehaviour
         if (_host != null)
         {
             int kf = _host.keyFrameInterval - (_host.DiagSeq % _host.keyFrameInterval);
+            float rbkB = _host.DiagReadbackBytes / 1024f;
             _styleSmall.normal.textColor = new Color(0.7f, 1f, 0.7f);
             GUI.Label(new Rect(0, y, Screen.width, 22),
-                $"Clients: {_host.ClientCount}  Port: {_host.port}  KeyFrame: {kf}/{_host.keyFrameInterval}", _styleSmall);
+                $"Clients: {_host.ClientCount}  Port: {_host.port}  KeyFrame: {kf}/{_host.keyFrameInterval}  Diff: {_host.DiagDiffBackend}  RB: {rbkB:F1}KB", _styleSmall);
             y += 26;
 
             string diag = _host.GetClientDiagnostics();

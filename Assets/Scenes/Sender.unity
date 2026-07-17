@@ -967,6 +967,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   port: 7777
   keyFrameInterval: 30
+  _maxQueueDepth: 8
+  _tileDiffShader: {fileID: 7200000, guid: bc7398732741ec4419851da7a823fa57, type: 3}
 --- !u!4 &1285881411
 Transform:
   m_ObjectHideFlags: 0

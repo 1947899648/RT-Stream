@@ -11,11 +11,12 @@ public class StreamHost : MonoBehaviour
     public int port = 7777;
     public int keyFrameInterval = 30;
     [SerializeField] private int _maxQueueDepth = 8;
+    [SerializeField] private ComputeShader _tileDiffShader;
 
     private TcpListener _listener;
     private List<ClientConnection> _clients = new List<ClientConnection>();
     private object _clientsLock = new object();
-    private TileDiffer _tileDiffer;
+    private ITileSource _tileSource;
     private int _seq;
     private Thread _acceptThread;
     private volatile bool _running;
@@ -27,6 +28,8 @@ public class StreamHost : MonoBehaviour
     }
 
     public int DiagSeq => _seq;
+    public string DiagDiffBackend => (_tileSource is GpuTileDiffer) ? "GPU" : "CPU";
+    public int DiagReadbackBytes => _tileSource != null ? _tileSource.DiagReadbackBytes : 0;
 
     private class ClientConnection
     {
@@ -123,7 +126,15 @@ public class StreamHost : MonoBehaviour
         DrawingCanvas canvas = FindObjectOfType<DrawingCanvas>();
         _texWidth = SceneConfig.TextureSize;
         _texHeight = SceneConfig.TextureSize;
-        _tileDiffer = new TileDiffer(canvas.CanvasTexture);
+
+        if (SystemInfo.supportsComputeShaders && _tileDiffShader != null)
+        {
+            _tileSource = new GpuTileDiffer(canvas.CanvasTexture, _tileDiffShader);
+        }
+        else
+        {
+            _tileSource = new TileDiffer(canvas.CanvasTexture);
+        }
 
         _listener = new TcpListener(IPAddress.Any, port);
         _listener.Start();
@@ -134,64 +145,57 @@ public class StreamHost : MonoBehaviour
 
     void Update()
     {
-        _tileDiffer.Update();
-        CleanupDeadClients();
+        bool anyNeedKeyFrame = false;
+        int clientCount;
+        lock (_clientsLock)
+        {
+            CleanupDeadClients();
+            clientCount = _clients.Count;
+            foreach (ClientConnection c in _clients)
+            {
+                if (c.Alive && c.NeedKeyFrame) anyNeedKeyFrame = true;
+            }
+        }
 
-        bool hasDirty = _tileDiffer.TryGetDirtyTiles(out List<DirtyTile> dirtyTiles) && dirtyTiles.Count > 0;
-        byte[] keyPacket = null;
-        byte[] deltaPacket = null;
+        bool wantKeyFrame = anyNeedKeyFrame || (_seq > 0 && _seq % keyFrameInterval == 0);
+        _tileSource.Update(wantKeyFrame);
+
+        if (!_tileSource.TryGetResult(out List<DirtyTile> dirtyTiles, out byte[] fullFrame)) return;
+        if (clientCount == 0) return;
 
         lock (_clientsLock)
         {
-            if (hasDirty)
+            if (fullFrame != null)
             {
-                bool periodicKey = _seq % keyFrameInterval == 0;
+                byte[] keyPacket = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, fullFrame);
                 foreach (ClientConnection c in _clients)
                 {
                     if (!c.Alive) continue;
-                    if (periodicKey || c.NeedKeyFrame)
-                    {
-                        if (keyPacket == null)
-                            keyPacket = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, _tileDiffer.LatestRawData);
-                        c.NeedKeyFrame = false;
-                        c.Enqueue(keyPacket, true);
-                    }
-                    else
-                    {
-                        if (deltaPacket == null)
-                            deltaPacket = FrameCodec.EncodeDeltaFrame(dirtyTiles);
-                        c.Enqueue(deltaPacket, false);
-                    }
-                }
-                _seq++;
-            }
-            else
-            {
-                byte[] raw = _tileDiffer.LatestRawData;
-                if (raw == null) return;
-
-                foreach (ClientConnection c in _clients)
-                {
-                    if (!c.Alive || !c.NeedKeyFrame) continue;
-                    if (keyPacket == null)
-                        keyPacket = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, raw);
                     c.NeedKeyFrame = false;
                     c.Enqueue(keyPacket, true);
                 }
+                _seq++;
+            }
+            else if (dirtyTiles != null && dirtyTiles.Count > 0)
+            {
+                byte[] deltaPacket = FrameCodec.EncodeDeltaFrame(dirtyTiles);
+                foreach (ClientConnection c in _clients)
+                {
+                    if (!c.Alive) continue;
+                    c.Enqueue(deltaPacket, false);
+                }
+                _seq++;
             }
         }
     }
 
     void CleanupDeadClients()
     {
-        lock (_clientsLock)
+        for (int i = _clients.Count - 1; i >= 0; i--)
         {
-            for (int i = _clients.Count - 1; i >= 0; i--)
-            {
-                if (_clients[i].Alive) continue;
-                _clients[i].Shutdown();
-                _clients.RemoveAt(i);
-            }
+            if (_clients[i].Alive) continue;
+            _clients[i].Shutdown();
+            _clients.RemoveAt(i);
         }
     }
 
@@ -250,5 +254,6 @@ public class StreamHost : MonoBehaviour
         }
 
         _acceptThread?.Join(1000);
+        _tileSource?.Dispose();
     }
 }

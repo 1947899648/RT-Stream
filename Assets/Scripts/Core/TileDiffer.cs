@@ -4,39 +4,64 @@ using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-public class TileDiffer
+public class TileDiffer : ITileSource
 {
     public int tileSize;
     public RenderTexture RT { get; private set; }
+    public int TilesX { get; private set; }
+    public int TilesY { get; private set; }
+    public int DiagReadbackBytes { get; private set; }
 
-    private int _tilesX, _tilesY;
     private ulong[] _prevHashes;
     private List<DirtyTile> _dirtyTiles = new List<DirtyTile>();
     private byte[] _rawData;
-    private bool _hasResults;
     private bool _requestInFlight;
-
-    public byte[] LatestRawData => _rawData;
-    public int TilesX => _tilesX;
-    public int TilesY => _tilesY;
+    private bool _resultReady;
+    private bool _wantKeyFrame;
 
     public TileDiffer(RenderTexture rt)
     {
         RT = rt;
         tileSize = SceneConfig.TileSize;
         if (tileSize > rt.width) tileSize = rt.width;
-        _tilesX = rt.width / tileSize;
-        _tilesY = rt.height / tileSize;
-        _prevHashes = new ulong[_tilesX * _tilesY];
+        TilesX = rt.width / tileSize;
+        TilesY = rt.height / tileSize;
+        _prevHashes = new ulong[TilesX * TilesY];
     }
 
-    public void Update()
+    public void Update(bool wantKeyFrame)
     {
-        if (!_requestInFlight)
+        _wantKeyFrame |= wantKeyFrame;
+
+        if (!_requestInFlight && !_resultReady)
         {
             _requestInFlight = true;
             AsyncGPUReadback.Request(RT, 0, TextureFormat.RGBA32, OnReadback);
         }
+    }
+
+    public bool TryGetResult(out List<DirtyTile> dirtyTiles, out byte[] fullFrame)
+    {
+        if (!_resultReady)
+        {
+            dirtyTiles = null;
+            fullFrame = null;
+            return false;
+        }
+
+        _resultReady = false;
+        if (_wantKeyFrame)
+        {
+            _wantKeyFrame = false;
+            dirtyTiles = null;
+            fullFrame = _rawData;
+        }
+        else
+        {
+            dirtyTiles = _dirtyTiles;
+            fullFrame = null;
+        }
+        return true;
     }
 
     private void OnReadback(AsyncGPUReadbackRequest request)
@@ -45,24 +70,25 @@ public class TileDiffer
         if (request.hasError) return;
 
         NativeArray<byte> data = request.GetData<byte>();
+        DiagReadbackBytes = data.Length;
         _rawData = new byte[data.Length];
         data.CopyTo(_rawData);
 
         ComputeDirtyTiles();
-        _hasResults = true;
+        _resultReady = true;
     }
 
     private void ComputeDirtyTiles()
     {
         _dirtyTiles.Clear();
-        int rowBytes = _tilesX * tileSize * 4;
+        int rowBytes = TilesX * tileSize * 4;
         int tileBytes = tileSize * tileSize * 4;
 
-        for (int ty = 0; ty < _tilesY; ty++)
+        for (int ty = 0; ty < TilesY; ty++)
         {
-            for (int tx = 0; tx < _tilesX; tx++)
+            for (int tx = 0; tx < TilesX; tx++)
             {
-                int idx = ty * _tilesX + tx;
+                int idx = ty * TilesX + tx;
                 int srcStart = ty * tileSize * rowBytes + tx * tileSize * 4;
 
                 byte[] tileData = new byte[tileBytes];
@@ -82,11 +108,5 @@ public class TileDiffer
         }
     }
 
-    public bool TryGetDirtyTiles(out List<DirtyTile> tiles)
-    {
-        tiles = _dirtyTiles;
-        bool had = _hasResults;
-        _hasResults = false;
-        return had;
-    }
+    public void Dispose() { }
 }

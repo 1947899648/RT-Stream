@@ -1,0 +1,149 @@
+﻿#pragma kernel KClear
+#pragma kernel KHash
+#pragma kernel KPrepArgs
+#pragma kernel KGatherDirty
+#pragma kernel KGatherAll
+
+Texture2D<float4> _RT;
+RWStructuredBuffer<uint2> _PrevHashes;
+RWStructuredBuffer<uint> _IdxBuffer;
+RWStructuredBuffer<uint> _ArgsBuffer;
+RWStructuredBuffer<uint> _GatherBuffer;
+
+uint _TileSize;
+uint _TilesX;
+uint _TilesY;
+
+#define THREADS 8
+#define HASH_INIT 2166136261u
+#define HASH_PRIME 16777619u
+#define HASH_INIT2 0x9E3779B9u
+#define HASH_PRIME2 0x85EBCA6Bu
+
+uint PackPixel(float4 c)
+{
+    uint4 b = uint4(round(c * 255.0));
+    return b.r | (b.g << 8) | (b.b << 16) | (b.a << 24);
+}
+
+groupshared uint2 gsHashes[THREADS * THREADS];
+
+[numthreads(1, 1, 1)]
+void KClear(uint3 id : SV_DispatchThreadID)
+{
+    _IdxBuffer[0] = 0;
+}
+
+[numthreads(THREADS, THREADS, 1)]
+void KHash(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint gi : SV_GroupIndex, uint3 gtid : SV_GroupThreadID)
+{
+    uint tileIndex = gid.y * _TilesX + gid.x;
+    uint baseX = gid.x * _TileSize;
+    uint baseY = gid.y * _TileSize;
+
+    uint strideX = _TileSize / THREADS;
+    uint strideY = _TileSize / THREADS;
+    uint startX = baseX + gtid.x * strideX;
+    uint startY = baseY + gtid.y * strideY;
+
+    uint2 hash = uint2(HASH_INIT, HASH_INIT2);
+    for (uint y = 0; y < strideY; y++)
+    {
+        for (uint x = 0; x < strideX; x++)
+        {
+            uint pixel = PackPixel(_RT[uint2(startX + x, startY + y)]);
+            hash.x ^= pixel;
+            hash.x *= HASH_PRIME;
+            hash.y ^= pixel;
+            hash.y *= HASH_PRIME2;
+        }
+    }
+
+    gsHashes[gi] = hash;
+    GroupMemoryBarrierWithGroupSync();
+
+    if (gi == 0)
+    {
+        uint2 final = uint2(HASH_INIT, HASH_INIT2);
+        for (uint i = 0; i < THREADS * THREADS; i++)
+        {
+            final.x ^= gsHashes[i].x;
+            final.x *= HASH_PRIME;
+            final.y ^= gsHashes[i].y;
+            final.y *= HASH_PRIME2;
+        }
+
+        bool dirty = any(final != _PrevHashes[tileIndex]);
+        if (dirty)
+        {
+            _PrevHashes[tileIndex] = final;
+            uint slot;
+            InterlockedAdd(_IdxBuffer[0], 1, slot);
+            _IdxBuffer[1 + slot] = tileIndex;
+        }
+    }
+}
+
+[numthreads(1, 1, 1)]
+void KPrepArgs(uint3 id : SV_DispatchThreadID)
+{
+    uint count = _IdxBuffer[0];
+    _ArgsBuffer[0] = count;
+    _ArgsBuffer[1] = 1;
+    _ArgsBuffer[2] = 1;
+}
+
+[numthreads(THREADS, THREADS, 1)]
+void KGatherDirty(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
+{
+    uint slot = gid.x;
+    uint tileIndex = _IdxBuffer[1 + slot];
+
+    uint baseX = (tileIndex % _TilesX) * _TileSize;
+    uint baseY = (tileIndex / _TilesX) * _TileSize;
+
+    uint strideX = _TileSize / THREADS;
+    uint strideY = _TileSize / THREADS;
+    uint localX = gtid.x * strideX;
+    uint localY = gtid.y * strideY;
+
+    uint tilePixels = _TileSize * _TileSize;
+    uint baseDst = slot * tilePixels;
+
+    for (uint y = 0; y < strideY; y++)
+    {
+        for (uint x = 0; x < strideX; x++)
+        {
+            uint pixel = PackPixel(_RT[uint2(baseX + localX + x, baseY + localY + y)]);
+            uint dstIdx = baseDst + (localY + y) * _TileSize + (localX + x);
+            _GatherBuffer[dstIdx] = pixel;
+        }
+    }
+}
+
+[numthreads(THREADS, THREADS, 1)]
+void KGatherAll(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
+{
+    uint tileIndex = gid.y * _TilesX + gid.x;
+    uint baseX = gid.x * _TileSize;
+    uint baseY = gid.y * _TileSize;
+
+    uint strideX = _TileSize / THREADS;
+    uint strideY = _TileSize / THREADS;
+    uint localX = gtid.x * strideX;
+    uint localY = gtid.y * strideY;
+
+    uint tilePixels = _TileSize * _TileSize;
+    uint baseDst = tileIndex * tilePixels;
+
+    for (uint y = 0; y < strideY; y++)
+    {
+        for (uint x = 0; x < strideX; x++)
+        {
+            uint pixel = PackPixel(_RT[uint2(baseX + localX + x, baseY + localY + y)]);
+            uint dstIdx = baseDst + (localY + y) * _TileSize + (localX + x);
+            _GatherBuffer[dstIdx] = pixel;
+        }
+    }
+}
+
