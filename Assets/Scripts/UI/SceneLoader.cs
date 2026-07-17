@@ -1,9 +1,7 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
-using System.Threading;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -22,16 +20,21 @@ public class SceneLoader : MonoBehaviour
     [FormerlySerializedAs("_sizeInput")]
     [SerializeField] private Dropdown _sizeDropdown;
 
-    private List<string> _discoveredIPs = new List<string>();
-    private object _scanLock = new object();
+    private NetworkDiscovery _discovery;
+    private InputField _ipInputField;
+    private bool _isManualInput;
+    private const string ManualEntryLabel = "\u624b\u52a8\u8f93\u5165...";
 
     void Start()
     {
         _senderBtn.onClick.AddListener(LoadSender);
         _receiverBtn.onClick.AddListener(LoadReceiver);
 
+        _discovery = GetComponent<NetworkDiscovery>();
         InitIPDropdown();
-        ThreadPool.QueueUserWorkItem(_ => ScanSubnet());
+        _ipDropdown.options.Add(new Dropdown.OptionData(ManualEntryLabel));
+        _ipDropdown.onValueChanged.AddListener(OnIPDropdownChanged);
+        CreateIPInputField();
 
         if (_sizeDropdown != null && _sizeDropdown.options.Count > 0)
             _sizeDropdown.value = 0;
@@ -39,15 +42,13 @@ public class SceneLoader : MonoBehaviour
 
     void Update()
     {
-        lock (_scanLock)
+        if (_discovery == null) return;
+
+        while (_discovery.TryGetDiscoveredIP(out string ip))
         {
-            if (_discoveredIPs.Count == 0) return;
-            foreach (string ip in _discoveredIPs)
-            {
-                if (!_ipDropdown.options.Any(o => o.text == ip))
-                    _ipDropdown.options.Add(new Dropdown.OptionData(ip));
-            }
-            _discoveredIPs.Clear();
+            int insertIdx = _ipDropdown.options.Count - 1;
+            if (insertIdx < 0) insertIdx = 0;
+            _ipDropdown.options.Insert(insertIdx, new Dropdown.OptionData(ip));
         }
     }
 
@@ -65,8 +66,18 @@ public class SceneLoader : MonoBehaviour
 
     void ApplyConfig()
     {
-        if (_ipDropdown != null && _ipDropdown.options.Count > 0)
-            SceneConfig.HostIP = _ipDropdown.options[_ipDropdown.value].text;
+        if (_isManualInput && _ipInputField != null)
+        {
+            string text = _ipInputField.text.Trim();
+            if (!string.IsNullOrEmpty(text))
+                SceneConfig.HostIP = text;
+        }
+        else if (_ipDropdown != null && _ipDropdown.options.Count > 0)
+        {
+            int idx = _ipDropdown.value;
+            if (idx >= 0 && idx < _ipDropdown.options.Count)
+                SceneConfig.HostIP = _ipDropdown.options[idx].text;
+        }
 
         if (int.TryParse(_portInput.text, out int p) && p > 0 && p < 65536)
             SceneConfig.Port = p;
@@ -76,6 +87,103 @@ public class SceneLoader : MonoBehaviour
             string sizeText = _sizeDropdown.options[_sizeDropdown.value].text;
             if (int.TryParse(sizeText, out int s) && s >= 64 && s <= 4096)
                 SceneConfig.TextureSize = s;
+        }
+    }
+
+    void CreateIPInputField()
+    {
+        if (_ipDropdown == null) return;
+
+        RectTransform dropRT = _ipDropdown.GetComponent<RectTransform>();
+        Transform parent = dropRT.parent;
+
+        GameObject go = new GameObject("IP InputField");
+        go.transform.SetParent(parent, false);
+
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = dropRT.anchorMin;
+        rt.anchorMax = dropRT.anchorMax;
+        rt.anchoredPosition = dropRT.anchoredPosition;
+        rt.sizeDelta = dropRT.sizeDelta;
+        rt.localScale = dropRT.localScale;
+        rt.pivot = dropRT.pivot;
+
+        Image bg = go.AddComponent<Image>();
+        bg.color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
+
+        InputField inputField = go.AddComponent<InputField>();
+
+        GameObject textGo = new GameObject("Text");
+        textGo.transform.SetParent(go.transform, false);
+        RectTransform textRT = textGo.AddComponent<RectTransform>();
+        textRT.anchorMin = Vector2.zero;
+        textRT.anchorMax = Vector2.one;
+        textRT.offsetMin = new Vector2(10, 6);
+        textRT.offsetMax = new Vector2(-10, -6);
+
+        Text textComp = textGo.AddComponent<Text>();
+        textComp.font = Font.CreateDynamicFontFromOSFont("Arial", 13);
+        textComp.fontSize = 13;
+        textComp.color = Color.white;
+        textComp.alignment = TextAnchor.MiddleLeft;
+        textComp.supportRichText = false;
+        inputField.textComponent = textComp;
+
+        GameObject plcGo = new GameObject("Placeholder");
+        plcGo.transform.SetParent(go.transform, false);
+        RectTransform plcRT = plcGo.AddComponent<RectTransform>();
+        plcRT.anchorMin = Vector2.zero;
+        plcRT.anchorMax = Vector2.one;
+        plcRT.offsetMin = new Vector2(10, 6);
+        plcRT.offsetMax = new Vector2(-10, -6);
+
+        Text plcComp = plcGo.AddComponent<Text>();
+        plcComp.font = Font.CreateDynamicFontFromOSFont("Arial", 13);
+        plcComp.fontSize = 13;
+        plcComp.color = new Color(0.5f, 0.5f, 0.5f, 1f);
+        plcComp.alignment = TextAnchor.MiddleLeft;
+        plcComp.supportRichText = false;
+        plcComp.text = "手动输入IP...";
+        inputField.placeholder = plcComp;
+
+        inputField.lineType = InputField.LineType.SingleLine;
+        inputField.onEndEdit.AddListener(OnIPInputEndEdit);
+
+        _ipInputField = inputField;
+        _ipInputField.gameObject.SetActive(false);
+    }
+
+    void OnIPInputEndEdit(string text)
+    {
+        _ipInputField.gameObject.SetActive(false);
+        _ipDropdown.gameObject.SetActive(true);
+
+        string ip = text.Trim();
+        if (!string.IsNullOrEmpty(ip) && ip != ManualEntryLabel)
+            _ipDropdown.captionText.text = ip;
+    }
+
+    void OnIPDropdownChanged(int index)
+    {
+        if (_ipInputField == null) return;
+
+        if (index == _ipDropdown.options.Count - 1)
+        {
+            _ipDropdown.gameObject.SetActive(false);
+            _ipInputField.gameObject.SetActive(true);
+            _isManualInput = true;
+
+            string currentIP = "";
+            if (index - 1 >= 0)
+                currentIP = _ipDropdown.options[index - 1].text;
+            _ipInputField.text = currentIP;
+            _ipInputField.ActivateInputField();
+        }
+        else
+        {
+            _isManualInput = false;
+            _ipInputField.gameObject.SetActive(false);
+            _ipDropdown.gameObject.SetActive(true);
         }
     }
 
@@ -131,75 +239,5 @@ public class SceneLoader : MonoBehaviour
         catch { }
 
         return ips;
-    }
-
-    void ScanSubnet()
-    {
-        string wifiIP = null;
-        try
-        {
-            foreach (string ip in GetLocalIPs())
-            {
-                if (ip != "127.0.0.1" && ip.StartsWith("192.168."))
-                {
-                    wifiIP = ip;
-                    break;
-                }
-            }
-        }
-        catch { }
-
-        if (string.IsNullOrEmpty(wifiIP)) return;
-
-        int lastDot = wifiIP.LastIndexOf('.');
-        string prefix = wifiIP.Substring(0, lastDot + 1);
-
-        int pending = 0;
-        int port = SceneConfig.Port;
-
-        for (int i = 1; i <= 254; i++)
-        {
-            string target = prefix + i;
-            if (target == wifiIP) continue;
-
-            Interlocked.Increment(ref pending);
-            ThreadPool.QueueUserWorkItem(_ =>
-            {
-                try
-                {
-                    Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                    socket.Blocking = false;
-
-                    try
-                    {
-                        socket.Connect(target, port);
-                        lock (_scanLock) _discoveredIPs.Add(target);
-                    }
-                    catch (SocketException ex)
-                    {
-                        if (ex.SocketErrorCode == SocketError.WouldBlock)
-                        {
-                            if (socket.Poll(200000, SelectMode.SelectWrite))
-                            {
-                                if (socket.RemoteEndPoint != null)
-                                    lock (_scanLock) _discoveredIPs.Add(target);
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        socket.Close();
-                    }
-                }
-                catch { }
-                finally
-                {
-                    Interlocked.Decrement(ref pending);
-                }
-            });
-        }
-
-        while (pending > 0)
-            Thread.Sleep(50);
     }
 }
