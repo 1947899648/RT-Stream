@@ -69,7 +69,7 @@ public class InformationDisplay : MonoBehaviour
         {
             int size = SceneConfig.TextureSize;
             int rtMem = size * size * 4;
-            int t = size / 16;
+            int t = size / SceneConfig.TileSize;
             _styleSmall.normal.textColor = new Color(0.7f, 1f, 0.7f);
             GUI.Label(new Rect(0, y, Screen.width, 22),
                 $"RT: {size}x{size}  RGBA32  {rtMem / 1024f / 1024f:F1} MB  Tile: {t}x{t} ({t * t})", _styleSmall);

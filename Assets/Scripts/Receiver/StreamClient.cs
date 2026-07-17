@@ -158,18 +158,21 @@ public class StreamClient : MonoBehaviour
         {
             if (!_initialized) return;
             List<DirtyTile> tiles = FrameCodec.DecodeDeltaFrame(packet);
+            int tileSize = SceneConfig.TileSize;
+            if (tileSize > _texWidth) tileSize = _texWidth;
             int rowLen = _texWidth * 4;
-            int tilesPerRow = _texWidth / 16;
+            int tileRowBytes = tileSize * 4;
+            int tilesPerRow = _texWidth / tileSize;
 
             foreach (DirtyTile tile in tiles)
             {
-                int tileX = (tile.index % tilesPerRow) * 16;
-                int tileY = (tile.index / tilesPerRow) * 16;
+                int tileX = (tile.index % tilesPerRow) * tileSize;
+                int tileY = (tile.index / tilesPerRow) * tileSize;
 
-                for (int y = 0; y < 16; y++)
+                for (int y = 0; y < tileSize; y++)
                 {
                     int dstOffset = ((tileY + y) * rowLen) + tileX * 4;
-                    Buffer.BlockCopy(tile.data, y * 16 * 4, _tileBuffer, dstOffset, 16 * 4);
+                    Buffer.BlockCopy(tile.data, y * tileRowBytes, _tileBuffer, dstOffset, tileRowBytes);
                 }
             }
         }

@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 
 public class TileDiffer
 {
-    public int tileSize = 16;
+    public int tileSize;
     public RenderTexture RT { get; private set; }
 
     private int _tilesX, _tilesY;
@@ -23,6 +23,8 @@ public class TileDiffer
     public TileDiffer(RenderTexture rt)
     {
         RT = rt;
+        tileSize = SceneConfig.TileSize;
+        if (tileSize > rt.width) tileSize = rt.width;
         _tilesX = rt.width / tileSize;
         _tilesY = rt.height / tileSize;
         _prevHashes = new ulong[_tilesX * _tilesY];
