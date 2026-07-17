@@ -21,6 +21,9 @@ public class StreamClient : MonoBehaviour
     private byte[] _tileBuffer;
     private bool _initialized;
     private int _texWidth, _texHeight;
+    private List<byte[]> _batch = new List<byte[]>();
+    private int _skippedFrames;
+    private int _lastBatchSize;
 
     void Awake()
     {
@@ -29,10 +32,14 @@ public class StreamClient : MonoBehaviour
     }
 
     public bool IsConnected => _connected;
+    public int SkippedFrames => _skippedFrames;
+    public int LastBatchSize => _lastBatchSize;
 
     public void Connect()
     {
         Disconnect();
+        _skippedFrames = 0;
+        _lastBatchSize = 0;
         try
         {
             _tcpClient = new TcpClient();
@@ -58,6 +65,7 @@ public class StreamClient : MonoBehaviour
         _receiveThread?.Join(500);
         Close();
         while (_frameQueue.TryDequeue(out _)) { }
+        _batch.Clear();
     }
 
     void Update()
@@ -65,8 +73,32 @@ public class StreamClient : MonoBehaviour
         if (!_connected) return;
 
         while (_frameQueue.TryDequeue(out byte[] packet))
+            _batch.Add(packet);
+        if (_batch.Count == 0) return;
+
+        _lastBatchSize = _batch.Count;
+
+        int startIdx = 0;
+        for (int i = _batch.Count - 1; i >= 0; i--)
         {
-            ProcessFrame(packet);
+            if (FrameCodec.GetFrameType(_batch[i]) == FrameType.KeyFrame)
+            {
+                startIdx = i;
+                break;
+            }
+        }
+        _skippedFrames += startIdx;
+
+        for (int i = startIdx; i < _batch.Count; i++)
+            ApplyPacket(_batch[i]);
+
+        _batch.Clear();
+
+        if (_initialized && _tileBuffer != null)
+        {
+            _tex2D.LoadRawTextureData(_tileBuffer);
+            _tex2D.Apply();
+            Graphics.Blit(_tex2D, SceneConfig.DisplayRT);
         }
     }
 
@@ -105,16 +137,21 @@ public class StreamClient : MonoBehaviour
         return true;
     }
 
-    void ProcessFrame(byte[] packet)
+    void ApplyPacket(byte[] packet)
     {
         FrameType type = FrameCodec.GetFrameType(packet);
         if (type == FrameType.KeyFrame)
         {
-            FrameCodec.DecodeKeyFrame(packet, out _texWidth, out _texHeight, out byte[] pixels);
+            FrameCodec.DecodeKeyFrame(packet, out int width, out int height, out byte[] pixels);
             _tileBuffer = pixels;
 
-            if (_tex2D != null) Destroy(_tex2D);
-            _tex2D = new Texture2D(_texWidth, _texHeight, TextureFormat.RGBA32, false);
+            if (_tex2D == null || _tex2D.width != width || _tex2D.height != height)
+            {
+                if (_tex2D != null) Destroy(_tex2D);
+                _tex2D = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            }
+            _texWidth = width;
+            _texHeight = height;
             _initialized = true;
         }
         else if (type == FrameType.DeltaFrame)
@@ -122,11 +159,12 @@ public class StreamClient : MonoBehaviour
             if (!_initialized) return;
             List<DirtyTile> tiles = FrameCodec.DecodeDeltaFrame(packet);
             int rowLen = _texWidth * 4;
+            int tilesPerRow = _texWidth / 16;
 
             foreach (DirtyTile tile in tiles)
             {
-                int tileX = (tile.index % (_texWidth / 16)) * 16;
-                int tileY = (tile.index / (_texWidth / 16)) * 16;
+                int tileX = (tile.index % tilesPerRow) * 16;
+                int tileY = (tile.index / tilesPerRow) * 16;
 
                 for (int y = 0; y < 16; y++)
                 {
@@ -134,13 +172,6 @@ public class StreamClient : MonoBehaviour
                     Buffer.BlockCopy(tile.data, y * 16 * 4, _tileBuffer, dstOffset, 16 * 4);
                 }
             }
-        }
-
-        if (_initialized && _tileBuffer != null)
-        {
-            _tex2D.LoadRawTextureData(_tileBuffer);
-            _tex2D.Apply();
-            Graphics.Blit(_tex2D, SceneConfig.DisplayRT);
         }
     }
 
