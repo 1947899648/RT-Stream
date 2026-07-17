@@ -90,7 +90,7 @@ public class InformationDisplay : MonoBehaviour
             float rbkB = _host.DiagReadbackBytes / 1024f;
             _styleSmall.normal.textColor = new Color(0.7f, 1f, 0.7f);
             GUI.Label(new Rect(0, y, Screen.width, 22),
-                $"Clients: {_host.ClientCount}  Port: {_host.port}  KF:{kf}/{_host.keyFrameInterval}  Diff:{_host.DiagDiffBackend}  RB:{rbkB:F1}KB  Dirty:{_host.DiagDirtyTiles}", _styleSmall);
+                $"Clients: {_host.ClientCount}  Port: {_host.port}  KF:{kf}/{_host.keyFrameInterval}  Diff:{_host.DiagDiffBackend}  RB:{rbkB:F1}KB  Dirty:{_host.DiagDirtyTiles}  Up:{_host.UpMBps:F4}MB/s", _styleSmall);
             y += 26;
 
             string diag = _host.GetClientDiagnostics();
@@ -105,7 +105,7 @@ public class InformationDisplay : MonoBehaviour
             _styleSmall.normal.textColor = _client.IsConnected ? Color.green : Color.red;
             GUI.Label(new Rect(0, y, Screen.width, 22),
                 _client.IsConnected
-                    ? $"Connected  {_client.hostIP}:{_client.port}  batch:{_client.LastBatchSize} skip:{_client.SkippedFrames}  Apply:{_client.ApplyBackend}  Rcv:{_client.DirtyTilesReceived}  Net:{_client.NetLagMs:F0}ms  Loc:{_client.LocalLagMs:F0}ms  Idle:{_client.SilenceMs:F0}ms"
+                    ? $"Connected  {_client.hostIP}:{_client.port}  batch:{_client.LastBatchSize} skip:{_client.SkippedFrames}  Apply:{_client.ApplyBackend}  Rcv:{_client.DirtyTilesReceived}  Net:{_client.NetLagMs:F0}ms  Loc:{_client.LocalLagMs:F0}ms  Idle:{_client.SilenceMs:F0}ms  Down:{_client.DownMBps:F4}MB/s"
                     : "Disconnected", _styleSmall);
         }
 

@@ -32,6 +32,9 @@ public class StreamHost : MonoBehaviour
     public int DiagReadbackBytes => _tileSource != null ? _tileSource.DiagReadbackBytes : 0;
     public int DiagDirtyTiles { get; private set; }
 
+    private BandwidthMeter _upBandwidth = new BandwidthMeter();
+    public float UpMBps => _upBandwidth.MBps;
+
     private class ClientConnection
     {
         public volatile bool Alive = true;
@@ -170,6 +173,7 @@ public class StreamHost : MonoBehaviour
             if (fullFrame != null)
             {
                 byte[] keyPacket = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, fullFrame);
+                _upBandwidth.Add(keyPacket.Length);
                 foreach (ClientConnection c in _clients)
                 {
                     if (!c.Alive) continue;
@@ -181,6 +185,7 @@ public class StreamHost : MonoBehaviour
             else if (dirtyTiles != null && dirtyTiles.Count > 0)
             {
                 byte[] deltaPacket = FrameCodec.EncodeDeltaFrame(dirtyTiles);
+                _upBandwidth.Add(deltaPacket.Length);
                 foreach (ClientConnection c in _clients)
                 {
                     if (!c.Alive) continue;
@@ -189,6 +194,8 @@ public class StreamHost : MonoBehaviour
                 _seq++;
             }
         }
+
+        _upBandwidth.Sample();
     }
 
     void CleanupDeadClients()

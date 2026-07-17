@@ -41,6 +41,9 @@ public class StreamClient : MonoBehaviour
     private float _localLagMs;
     private long _lastRecvWatchTimestamp;
 
+    private BandwidthMeter _downBandwidth = new BandwidthMeter();
+    public float DownMBps => _downBandwidth.MBps;
+
     void Awake()
     {
         hostIP = SceneConfig.HostIP;
@@ -68,6 +71,7 @@ public class StreamClient : MonoBehaviour
         Disconnect();
         _skippedFrames = 0;
         _lastBatchSize = 0;
+        _downBandwidth.Reset();
 
         _useGpuApply = SystemInfo.supportsComputeShaders && _tileApplyShader != null;
         if (_useGpuApply)
@@ -108,6 +112,8 @@ public class StreamClient : MonoBehaviour
     void Update()
     {
         if (!_connected) return;
+
+        _downBandwidth.Sample();
 
         while (_frameQueue.TryDequeue(out FrameEntry entry))
         {
@@ -164,6 +170,7 @@ public class StreamClient : MonoBehaviour
 
                 byte[] frameData = new byte[frameLen];
                 if (!ReadExact(_stream, frameData, 0, frameLen)) break;
+                _downBandwidth.Add(frameLen);
                 long sendTicks = FrameCodec.GetTimestamp(frameData);
                 float netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
                 _frameQueue.Enqueue(new FrameEntry { data = frameData, recvTimestamp = System.Diagnostics.Stopwatch.GetTimestamp(), netLagMs = netLagMs });
