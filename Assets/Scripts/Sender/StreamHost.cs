@@ -32,8 +32,10 @@ public class StreamHost : MonoBehaviour
     public int DiagReadbackBytes => _tileSource != null ? _tileSource.DiagReadbackBytes : 0;
     public int DiagDirtyTiles { get; private set; }
 
-    private BandwidthMeter _upBandwidth = new BandwidthMeter();
-    public float UpMBps => _upBandwidth.MBps;
+    private BandwidthMeter _upEncBandwidth = new BandwidthMeter();
+    private BandwidthMeter _upSendBandwidth = new BandwidthMeter();
+    public float UpEncMBps => _upEncBandwidth.MBps;
+    public float UpSendMBps => _upSendBandwidth.MBps;
 
     private class ClientConnection
     {
@@ -47,11 +49,13 @@ public class StreamHost : MonoBehaviour
         private object _lock = new object();
         private int _maxDepth;
         private byte[] _lenBuf = new byte[4];
+        private BandwidthMeter _sendMeter;
 
-        public ClientConnection(TcpClient client, int maxDepth)
+        public ClientConnection(TcpClient client, int maxDepth, BandwidthMeter sendMeter)
         {
             _client = client;
             _maxDepth = maxDepth;
+            _sendMeter = sendMeter;
             try { _client.NoDelay = true; } catch { }
             _sendThread = new Thread(SendLoop) { IsBackground = true };
             _sendThread.Start();
@@ -107,6 +111,7 @@ public class StreamHost : MonoBehaviour
                     _lenBuf[3] = (byte)(len >> 24);
                     stream.Write(_lenBuf, 0, 4);
                     stream.Write(packet, 0, len);
+                    _sendMeter.Add(4 + len);
                 }
             }
             catch { }
@@ -173,7 +178,7 @@ public class StreamHost : MonoBehaviour
             if (fullFrame != null)
             {
                 byte[] keyPacket = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, fullFrame);
-                _upBandwidth.Add(keyPacket.Length);
+                _upEncBandwidth.Add(keyPacket.Length);
                 foreach (ClientConnection c in _clients)
                 {
                     if (!c.Alive) continue;
@@ -185,7 +190,7 @@ public class StreamHost : MonoBehaviour
             else if (dirtyTiles != null && dirtyTiles.Count > 0)
             {
                 byte[] deltaPacket = FrameCodec.EncodeDeltaFrame(dirtyTiles);
-                _upBandwidth.Add(deltaPacket.Length);
+                _upEncBandwidth.Add(deltaPacket.Length);
                 foreach (ClientConnection c in _clients)
                 {
                     if (!c.Alive) continue;
@@ -195,7 +200,8 @@ public class StreamHost : MonoBehaviour
             }
         }
 
-        _upBandwidth.Sample();
+        _upEncBandwidth.Sample();
+        _upSendBandwidth.Sample();
     }
 
     void CleanupDeadClients()
@@ -215,7 +221,7 @@ public class StreamHost : MonoBehaviour
             try
             {
                 TcpClient client = _listener.AcceptTcpClient();
-                ClientConnection conn = new ClientConnection(client, _maxQueueDepth);
+                ClientConnection conn = new ClientConnection(client, _maxQueueDepth, _upSendBandwidth);
                 lock (_clientsLock)
                 {
                     _clients.Add(conn);

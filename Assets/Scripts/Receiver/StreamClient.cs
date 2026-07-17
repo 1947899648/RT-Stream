@@ -41,8 +41,10 @@ public class StreamClient : MonoBehaviour
     private float _localLagMs;
     private long _lastRecvWatchTimestamp;
 
-    private BandwidthMeter _downBandwidth = new BandwidthMeter();
-    public float DownMBps => _downBandwidth.MBps;
+    private BandwidthMeter _downRecvBandwidth = new BandwidthMeter();
+    private BandwidthMeter _downProcBandwidth = new BandwidthMeter();
+    public float DownRecvMBps => _downRecvBandwidth.MBps;
+    public float DownProcMBps => _downProcBandwidth.MBps;
 
     void Awake()
     {
@@ -71,7 +73,8 @@ public class StreamClient : MonoBehaviour
         Disconnect();
         _skippedFrames = 0;
         _lastBatchSize = 0;
-        _downBandwidth.Reset();
+        _downRecvBandwidth.Reset();
+        _downProcBandwidth.Reset();
 
         _useGpuApply = SystemInfo.supportsComputeShaders && _tileApplyShader != null;
         if (_useGpuApply)
@@ -113,7 +116,8 @@ public class StreamClient : MonoBehaviour
     {
         if (!_connected) return;
 
-        _downBandwidth.Sample();
+        _downRecvBandwidth.Sample();
+        _downProcBandwidth.Sample();
 
         while (_frameQueue.TryDequeue(out FrameEntry entry))
         {
@@ -170,7 +174,7 @@ public class StreamClient : MonoBehaviour
 
                 byte[] frameData = new byte[frameLen];
                 if (!ReadExact(_stream, frameData, 0, frameLen)) break;
-                _downBandwidth.Add(frameLen);
+                _downRecvBandwidth.Add(frameLen);
                 long sendTicks = FrameCodec.GetTimestamp(frameData);
                 float netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
                 _frameQueue.Enqueue(new FrameEntry { data = frameData, recvTimestamp = System.Diagnostics.Stopwatch.GetTimestamp(), netLagMs = netLagMs });
@@ -197,6 +201,7 @@ public class StreamClient : MonoBehaviour
 
     void ApplyPacket(byte[] packet)
     {
+        _downProcBandwidth.Add(packet.Length);
         FrameType type = FrameCodec.GetFrameType(packet);
         if (_useGpuApply && TryApplyGpu(packet, type)) return;
 
