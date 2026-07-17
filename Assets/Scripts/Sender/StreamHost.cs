@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using UnityEngine;
 
@@ -9,21 +10,113 @@ public class StreamHost : MonoBehaviour
 {
     public int port = 7777;
     public int keyFrameInterval = 30;
+    [SerializeField] private int _maxQueueDepth = 8;
 
     private TcpListener _listener;
-    private List<TcpClient> _clients = new List<TcpClient>();
+    private List<ClientConnection> _clients = new List<ClientConnection>();
+    private object _clientsLock = new object();
     private TileDiffer _tileDiffer;
     private int _seq;
     private Thread _acceptThread;
-    private bool _running;
+    private volatile bool _running;
     private int _texWidth, _texHeight;
 
     public int ClientCount
     {
-        get { lock (_clients) return _clients.Count; }
+        get { lock (_clientsLock) return _clients.Count; }
     }
 
     public int DiagSeq => _seq;
+
+    private class ClientConnection
+    {
+        public volatile bool Alive = true;
+        public bool NeedKeyFrame = true;
+        public int DroppedFrames;
+
+        private TcpClient _client;
+        private Thread _sendThread;
+        private Queue<byte[]> _queue = new Queue<byte[]>();
+        private object _lock = new object();
+        private int _maxDepth;
+        private byte[] _lenBuf = new byte[4];
+
+        public ClientConnection(TcpClient client, int maxDepth)
+        {
+            _client = client;
+            _maxDepth = maxDepth;
+            try { _client.NoDelay = true; } catch { }
+            _sendThread = new Thread(SendLoop) { IsBackground = true };
+            _sendThread.Start();
+        }
+
+        public int QueueDepth
+        {
+            get { lock (_lock) return _queue.Count; }
+        }
+
+        public void Enqueue(byte[] packet, bool isKeyFrame)
+        {
+            lock (_lock)
+            {
+                if (isKeyFrame)
+                {
+                    _queue.Clear();
+                }
+                else if (_queue.Count >= _maxDepth)
+                {
+                    _queue.Clear();
+                    NeedKeyFrame = true;
+                    DroppedFrames++;
+                    return;
+                }
+                _queue.Enqueue(packet);
+                Monitor.Pulse(_lock);
+            }
+        }
+
+        private void SendLoop()
+        {
+            try
+            {
+                NetworkStream stream = _client.GetStream();
+                while (Alive)
+                {
+                    byte[] packet;
+                    lock (_lock)
+                    {
+                        while (_queue.Count == 0)
+                        {
+                            if (!Alive) return;
+                            Monitor.Wait(_lock);
+                        }
+                        packet = _queue.Dequeue();
+                    }
+
+                    int len = packet.Length;
+                    _lenBuf[0] = (byte)len;
+                    _lenBuf[1] = (byte)(len >> 8);
+                    _lenBuf[2] = (byte)(len >> 16);
+                    _lenBuf[3] = (byte)(len >> 24);
+                    stream.Write(_lenBuf, 0, 4);
+                    stream.Write(packet, 0, len);
+                }
+            }
+            catch { }
+            finally
+            {
+                Alive = false;
+            }
+        }
+
+        public void Shutdown()
+        {
+            Alive = false;
+            lock (_lock) Monitor.Pulse(_lock);
+            try { _client.Close(); } catch { }
+            _sendThread.Join(500);
+        }
+    }
 
     void Start()
     {
@@ -42,22 +135,64 @@ public class StreamHost : MonoBehaviour
     void Update()
     {
         _tileDiffer.Update();
+        CleanupDeadClients();
 
-        if (!_tileDiffer.TryGetDirtyTiles(out List<DirtyTile> dirtyTiles)) return;
-        if (dirtyTiles.Count == 0) return;
+        bool hasDirty = _tileDiffer.TryGetDirtyTiles(out List<DirtyTile> dirtyTiles) && dirtyTiles.Count > 0;
+        byte[] keyPacket = null;
+        byte[] deltaPacket = null;
 
-        byte[] packet;
-        if (_seq % keyFrameInterval == 0)
+        lock (_clientsLock)
         {
-            packet = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, _tileDiffer.LatestRawData);
-        }
-        else
-        {
-            packet = FrameCodec.EncodeDeltaFrame(dirtyTiles);
-        }
+            if (hasDirty)
+            {
+                bool periodicKey = _seq % keyFrameInterval == 0;
+                foreach (ClientConnection c in _clients)
+                {
+                    if (!c.Alive) continue;
+                    if (periodicKey || c.NeedKeyFrame)
+                    {
+                        if (keyPacket == null)
+                            keyPacket = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, _tileDiffer.LatestRawData);
+                        c.NeedKeyFrame = false;
+                        c.Enqueue(keyPacket, true);
+                    }
+                    else
+                    {
+                        if (deltaPacket == null)
+                            deltaPacket = FrameCodec.EncodeDeltaFrame(dirtyTiles);
+                        c.Enqueue(deltaPacket, false);
+                    }
+                }
+                _seq++;
+            }
+            else
+            {
+                byte[] raw = _tileDiffer.LatestRawData;
+                if (raw == null) return;
 
-        SendToAll(packet);
-        _seq++;
+                foreach (ClientConnection c in _clients)
+                {
+                    if (!c.Alive || !c.NeedKeyFrame) continue;
+                    if (keyPacket == null)
+                        keyPacket = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, raw);
+                    c.NeedKeyFrame = false;
+                    c.Enqueue(keyPacket, true);
+                }
+            }
+        }
+    }
+
+    void CleanupDeadClients()
+    {
+        lock (_clientsLock)
+        {
+            for (int i = _clients.Count - 1; i >= 0; i--)
+            {
+                if (_clients[i].Alive) continue;
+                _clients[i].Shutdown();
+                _clients.RemoveAt(i);
+            }
+        }
     }
 
     void AcceptLoop()
@@ -67,16 +202,10 @@ public class StreamHost : MonoBehaviour
             try
             {
                 TcpClient client = _listener.AcceptTcpClient();
-                lock (_clients)
+                ClientConnection conn = new ClientConnection(client, _maxQueueDepth);
+                lock (_clientsLock)
                 {
-                    _clients.Add(client);
-                }
-
-                byte[] lastData = _tileDiffer.LatestRawData;
-                if (lastData != null)
-                {
-                    byte[] keyFrame = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, lastData);
-                    SendToOne(client, keyFrame);
+                    _clients.Add(conn);
                 }
             }
             catch (SocketException)
@@ -90,39 +219,23 @@ public class StreamHost : MonoBehaviour
         }
     }
 
-    void SendToAll(byte[] data)
+    public string GetClientDiagnostics()
     {
-        byte[] prefixed = new byte[4 + data.Length];
-        BitConverter.GetBytes(data.Length).CopyTo(prefixed, 0);
-        Buffer.BlockCopy(data, 0, prefixed, 4, data.Length);
-
-        lock (_clients)
+        lock (_clientsLock)
         {
-            for (int i = _clients.Count - 1; i >= 0; i--)
+            if (_clients.Count == 0) return null;
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < _clients.Count; i++)
             {
-                try
-                {
-                    _clients[i].GetStream().Write(prefixed, 0, prefixed.Length);
-                }
-                catch
-                {
-                    _clients[i].Close();
-                    _clients.RemoveAt(i);
-                }
+                if (i > 0) sb.Append("    ");
+                ClientConnection c = _clients[i];
+                sb.Append('C').Append(i)
+                  .Append(" queue:").Append(c.QueueDepth)
+                  .Append(" drop:").Append(c.DroppedFrames);
             }
+            return sb.ToString();
         }
-    }
-
-    void SendToOne(TcpClient client, byte[] data)
-    {
-        try
-        {
-            byte[] prefixed = new byte[4 + data.Length];
-            BitConverter.GetBytes(data.Length).CopyTo(prefixed, 0);
-            Buffer.BlockCopy(data, 0, prefixed, 4, data.Length);
-            client.GetStream().Write(prefixed, 0, prefixed.Length);
-        }
-        catch { }
     }
 
     void OnDestroy()
@@ -130,9 +243,9 @@ public class StreamHost : MonoBehaviour
         _running = false;
         _listener?.Stop();
 
-        lock (_clients)
+        lock (_clientsLock)
         {
-            foreach (TcpClient c in _clients) c.Close();
+            foreach (ClientConnection c in _clients) c.Shutdown();
             _clients.Clear();
         }
 

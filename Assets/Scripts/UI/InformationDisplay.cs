@@ -90,6 +90,14 @@ public class InformationDisplay : MonoBehaviour
             _styleSmall.normal.textColor = new Color(0.7f, 1f, 0.7f);
             GUI.Label(new Rect(0, y, Screen.width, 22),
                 $"Clients: {_host.ClientCount}  Port: {_host.port}  KeyFrame: {kf}/{_host.keyFrameInterval}", _styleSmall);
+            y += 26;
+
+            string diag = _host.GetClientDiagnostics();
+            if (!string.IsNullOrEmpty(diag))
+            {
+                _styleSmall.normal.textColor = new Color(1f, 0.9f, 0.5f);
+                GUI.Label(new Rect(0, y, Screen.width, 22), diag, _styleSmall);
+            }
         }
         else if (_client != null)
         {
