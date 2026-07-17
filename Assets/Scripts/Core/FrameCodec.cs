@@ -15,7 +15,7 @@ public enum FrameType : byte
 
 public static class FrameCodec
 {
-    public const int HeaderSize = 7;
+    public const int HeaderSize = 15;
     private static int TileBytes => SceneConfig.TileSize * SceneConfig.TileSize * 4;
 
     public static byte[] EncodeDeltaFrame(List<DirtyTile> tiles)
@@ -27,6 +27,7 @@ public static class FrameCodec
         packet[0] = (byte)FrameType.DeltaFrame;
         BitConverter.GetBytes((ushort)tiles.Count).CopyTo(packet, 1);
         BitConverter.GetBytes((uint)payloadLen).CopyTo(packet, 3);
+        BitConverter.GetBytes(DateTime.UtcNow.Ticks).CopyTo(packet, 7);
 
         int pos = HeaderSize;
         foreach (DirtyTile tile in tiles)
@@ -46,6 +47,7 @@ public static class FrameCodec
         packet[0] = (byte)FrameType.KeyFrame;
         BitConverter.GetBytes((ushort)0).CopyTo(packet, 1);
         BitConverter.GetBytes((uint)payloadLen).CopyTo(packet, 3);
+        BitConverter.GetBytes(DateTime.UtcNow.Ticks).CopyTo(packet, 7);
 
         BitConverter.GetBytes(width).CopyTo(packet, HeaderSize);
         BitConverter.GetBytes(height).CopyTo(packet, HeaderSize + 4);
@@ -57,6 +59,11 @@ public static class FrameCodec
     public static FrameType GetFrameType(byte[] packet)
     {
         return (FrameType)packet[0];
+    }
+
+    public static long GetTimestamp(byte[] packet)
+    {
+        return BitConverter.ToInt64(packet, 7);
     }
 
     public static List<DirtyTile> DecodeDeltaFrame(byte[] packet)

@@ -11,10 +11,17 @@ public class StreamClient : MonoBehaviour
     public int port;
     [SerializeField] private ComputeShader _tileApplyShader;
 
+    private struct FrameEntry
+    {
+        public byte[] data;
+        public long recvTimestamp;
+        public float netLagMs;
+    }
+
     private TcpClient _tcpClient;
     private NetworkStream _stream;
     private Thread _receiveThread;
-    private ConcurrentQueue<byte[]> _frameQueue = new ConcurrentQueue<byte[]>();
+    private ConcurrentQueue<FrameEntry> _frameQueue = new ConcurrentQueue<FrameEntry>();
     private bool _connected;
     private bool _running;
 
@@ -30,6 +37,10 @@ public class StreamClient : MonoBehaviour
     private ComputeBuffer _payloadBuffer;
     private int _kApplyFull, _kApplyDelta;
 
+    private float _netLagMs;
+    private float _localLagMs;
+    private long _lastRecvWatchTimestamp;
+
     void Awake()
     {
         hostIP = SceneConfig.HostIP;
@@ -41,6 +52,16 @@ public class StreamClient : MonoBehaviour
     public int LastBatchSize => _lastBatchSize;
     public string ApplyBackend => _useGpuApply ? "GPU" : "CPU";
     public int DirtyTilesReceived { get; private set; }
+    public float NetLagMs => _netLagMs;
+    public float LocalLagMs => _localLagMs;
+    public float SilenceMs
+    {
+        get
+        {
+            if (_lastRecvWatchTimestamp == 0) return 0;
+            return (System.Diagnostics.Stopwatch.GetTimestamp() - _lastRecvWatchTimestamp) * 1000f / System.Diagnostics.Stopwatch.Frequency;
+        }
+    }
 
     public void Connect()
     {
@@ -79,7 +100,7 @@ public class StreamClient : MonoBehaviour
         _initialized = false;
         _receiveThread?.Join(500);
         Close();
-        while (_frameQueue.TryDequeue(out _)) { }
+        while (_frameQueue.TryDequeue(out FrameEntry _)) { }
         _batch.Clear();
         ReleasePayloadBuffer();
     }
@@ -88,8 +109,14 @@ public class StreamClient : MonoBehaviour
     {
         if (!_connected) return;
 
-        while (_frameQueue.TryDequeue(out byte[] packet))
-            _batch.Add(packet);
+        while (_frameQueue.TryDequeue(out FrameEntry entry))
+        {
+            _batch.Add(entry.data);
+            _netLagMs = entry.netLagMs;
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            _localLagMs = (now - entry.recvTimestamp) * 1000f / System.Diagnostics.Stopwatch.Frequency;
+            _lastRecvWatchTimestamp = now;
+        }
         if (_batch.Count == 0) return;
 
         _lastBatchSize = _batch.Count;
@@ -137,7 +164,9 @@ public class StreamClient : MonoBehaviour
 
                 byte[] frameData = new byte[frameLen];
                 if (!ReadExact(_stream, frameData, 0, frameLen)) break;
-                _frameQueue.Enqueue(frameData);
+                long sendTicks = FrameCodec.GetTimestamp(frameData);
+                float netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
+                _frameQueue.Enqueue(new FrameEntry { data = frameData, recvTimestamp = System.Diagnostics.Stopwatch.GetTimestamp(), netLagMs = netLagMs });
             }
             catch
             {

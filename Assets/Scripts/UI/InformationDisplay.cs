@@ -105,7 +105,7 @@ public class InformationDisplay : MonoBehaviour
             _styleSmall.normal.textColor = _client.IsConnected ? Color.green : Color.red;
             GUI.Label(new Rect(0, y, Screen.width, 22),
                 _client.IsConnected
-                    ? $"Connected  {_client.hostIP}:{_client.port}  batch:{_client.LastBatchSize} skip:{_client.SkippedFrames}  Apply:{_client.ApplyBackend}  Rcv:{_client.DirtyTilesReceived}"
+                    ? $"Connected  {_client.hostIP}:{_client.port}  batch:{_client.LastBatchSize} skip:{_client.SkippedFrames}  Apply:{_client.ApplyBackend}  Rcv:{_client.DirtyTilesReceived}  Net:{_client.NetLagMs:F0}ms  Loc:{_client.LocalLagMs:F0}ms  Idle:{_client.SilenceMs:F0}ms"
                     : "Disconnected", _styleSmall);
         }
 
