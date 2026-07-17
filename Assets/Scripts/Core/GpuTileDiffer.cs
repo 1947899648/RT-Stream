@@ -194,25 +194,8 @@ public class GpuTileDiffer : ITileSource
         NativeArray<byte> gather = _gatherRequest.GetData<byte>();
         _roundBytes = gather.Length;
 
-        byte[] full = new byte[_tileCount * _tileBytes];
-        int rowBytes = _texWidth * 4;
-        int tileRowBytes = _tileSize * 4;
-
-        for (int ty = 0; ty < TilesY; ty++)
-        {
-            for (int tx = 0; tx < TilesX; tx++)
-            {
-                int tileIdx = ty * TilesX + tx;
-                int gatherOff = tileIdx * _tileBytes;
-
-                for (int y = 0; y < _tileSize; y++)
-                {
-                    int srcRow = gatherOff + y * tileRowBytes;
-                    int dstRow = (ty * _tileSize + y) * rowBytes + tx * tileRowBytes;
-                    NativeArray<byte>.Copy(gather, srcRow, full, dstRow, tileRowBytes);
-                }
-            }
-        }
+        byte[] full = new byte[_roundBytes];
+        NativeArray<byte>.Copy(gather, 0, full, 0, _roundBytes);
 
         _resultTiles = null;
         _resultFullFrame = full;

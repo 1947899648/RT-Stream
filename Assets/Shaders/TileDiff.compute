@@ -124,24 +124,21 @@ void KGatherDirty(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint3 
 [numthreads(THREADS, THREADS, 1)]
 void KGatherAll(uint3 id : SV_DispatchThreadID, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
 {
-    uint tileIndex = gid.y * _TilesX + gid.x;
     uint baseX = gid.x * _TileSize;
     uint baseY = gid.y * _TileSize;
+    uint texWidth = _TilesX * _TileSize;
 
     uint strideX = _TileSize / THREADS;
     uint strideY = _TileSize / THREADS;
     uint localX = gtid.x * strideX;
     uint localY = gtid.y * strideY;
 
-    uint tilePixels = _TileSize * _TileSize;
-    uint baseDst = tileIndex * tilePixels;
-
     for (uint y = 0; y < strideY; y++)
     {
         for (uint x = 0; x < strideX; x++)
         {
             uint pixel = PackPixel(_RT[uint2(baseX + localX + x, baseY + localY + y)]);
-            uint dstIdx = baseDst + (localY + y) * _TileSize + (localX + x);
+            uint dstIdx = (baseY + localY + y) * texWidth + (baseX + localX + x);
             _GatherBuffer[dstIdx] = pixel;
         }
     }
