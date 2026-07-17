@@ -966,7 +966,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   port: 7777
-  targetFps: 30
   keyFrameInterval: 30
 --- !u!4 &1285881411
 Transform:
