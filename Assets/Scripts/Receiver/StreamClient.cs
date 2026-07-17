@@ -40,6 +40,7 @@ public class StreamClient : MonoBehaviour
     public int SkippedFrames => _skippedFrames;
     public int LastBatchSize => _lastBatchSize;
     public string ApplyBackend => _useGpuApply ? "GPU" : "CPU";
+    public int DirtyTilesReceived { get; private set; }
 
     public void Connect()
     {
@@ -104,8 +105,14 @@ public class StreamClient : MonoBehaviour
         }
         _skippedFrames += startIdx;
 
+        int dirtyReceived = 0;
         for (int i = startIdx; i < _batch.Count; i++)
+        {
             ApplyPacket(_batch[i]);
+            if (FrameCodec.GetFrameType(_batch[i]) == FrameType.DeltaFrame)
+                dirtyReceived += BitConverter.ToUInt16(_batch[i], 1);
+        }
+        DirtyTilesReceived = dirtyReceived;
 
         _batch.Clear();
 

@@ -30,6 +30,7 @@ public class StreamHost : MonoBehaviour
     public int DiagSeq => _seq;
     public string DiagDiffBackend => (_tileSource is GpuTileDiffer) ? "GPU" : "CPU";
     public int DiagReadbackBytes => _tileSource != null ? _tileSource.DiagReadbackBytes : 0;
+    public int DiagDirtyTiles { get; private set; }
 
     private class ClientConnection
     {
@@ -161,6 +162,7 @@ public class StreamHost : MonoBehaviour
         _tileSource.Update(wantKeyFrame);
 
         if (!_tileSource.TryGetResult(out List<DirtyTile> dirtyTiles, out byte[] fullFrame)) return;
+        DiagDirtyTiles = dirtyTiles != null ? dirtyTiles.Count : 0;
         if (clientCount == 0) return;
 
         lock (_clientsLock)

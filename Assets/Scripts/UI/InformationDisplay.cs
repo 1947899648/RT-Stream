@@ -90,7 +90,7 @@ public class InformationDisplay : MonoBehaviour
             float rbkB = _host.DiagReadbackBytes / 1024f;
             _styleSmall.normal.textColor = new Color(0.7f, 1f, 0.7f);
             GUI.Label(new Rect(0, y, Screen.width, 22),
-                $"Clients: {_host.ClientCount}  Port: {_host.port}  KeyFrame: {kf}/{_host.keyFrameInterval}  Diff: {_host.DiagDiffBackend}  RB: {rbkB:F1}KB", _styleSmall);
+                $"Clients: {_host.ClientCount}  Port: {_host.port}  KF:{kf}/{_host.keyFrameInterval}  Diff:{_host.DiagDiffBackend}  RB:{rbkB:F1}KB  Dirty:{_host.DiagDirtyTiles}", _styleSmall);
             y += 26;
 
             string diag = _host.GetClientDiagnostics();
@@ -105,7 +105,7 @@ public class InformationDisplay : MonoBehaviour
             _styleSmall.normal.textColor = _client.IsConnected ? Color.green : Color.red;
             GUI.Label(new Rect(0, y, Screen.width, 22),
                 _client.IsConnected
-                    ? $"Connected  {_client.hostIP}:{_client.port}  batch:{_client.LastBatchSize} skip:{_client.SkippedFrames}  Apply:{_client.ApplyBackend}"
+                    ? $"Connected  {_client.hostIP}:{_client.port}  batch:{_client.LastBatchSize} skip:{_client.SkippedFrames}  Apply:{_client.ApplyBackend}  Rcv:{_client.DirtyTilesReceived}"
                     : "Disconnected", _styleSmall);
         }
 
