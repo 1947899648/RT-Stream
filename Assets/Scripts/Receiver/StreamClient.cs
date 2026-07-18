@@ -23,15 +23,12 @@ public class StreamClient : MonoBehaviour
     private bool _connected;
     private bool _running;
 
-    private Texture2D _tex2D;
-    private byte[] _tileBuffer;
     private bool _initialized;
     private int _texWidth, _texHeight;
     private List<byte[]> _batch = new List<byte[]>();
     private int _skippedFrames;
     private int _lastBatchSize;
 
-    private bool _useGpuApply;
     private ComputeBuffer _payloadBuffer;
     private int _kApplyFull, _kApplyDelta;
 
@@ -49,7 +46,6 @@ public class StreamClient : MonoBehaviour
     public bool IsConnected => _connected;
     public int SkippedFrames => _skippedFrames;
     public int LastBatchSize => _lastBatchSize;
-    public string ApplyBackend => _useGpuApply ? "GPU" : "CPU";
     public int DirtyTilesReceived { get; private set; }
     public float NetLagMs => _netLagMs;
     public float LocalLagMs => _localLagMs;
@@ -70,12 +66,8 @@ public class StreamClient : MonoBehaviour
         _downRecvBandwidth.Reset();
         _downProcBandwidth.Reset();
 
-        _useGpuApply = SystemInfo.supportsComputeShaders && _tileApplyShader != null;
-        if (_useGpuApply)
-        {
-            _kApplyFull = _tileApplyShader.FindKernel("KApplyFull");
-            _kApplyDelta = _tileApplyShader.FindKernel("KApplyDelta");
-        }
+        _kApplyFull = _tileApplyShader.FindKernel("KApplyFull");
+        _kApplyDelta = _tileApplyShader.FindKernel("KApplyDelta");
 
         try
         {
@@ -176,13 +168,6 @@ public class StreamClient : MonoBehaviour
         }
 
         _batch.Clear();
-
-        if (!_useGpuApply && _initialized && _tileBuffer != null)
-        {
-            _tex2D.LoadRawTextureData(_tileBuffer);
-            _tex2D.Apply();
-            Graphics.Blit(_tex2D, SceneConfig.DisplayRT);
-        }
     }
 
     void ReceiveLoop()
@@ -227,48 +212,8 @@ public class StreamClient : MonoBehaviour
     {
         _downProcBandwidth.Add(packet.Length);
 
-        if (FrameCodec.IsCompressed(packet))
-            packet = UncompressPacket(packet);
-
         FrameType type = FrameCodec.GetFrameType(packet);
-        if (_useGpuApply && TryApplyGpu(packet, type)) return;
-
-        if (type == FrameType.KeyFrame)
-        {
-            FrameCodec.DecodeKeyFrame(packet, out int width, out int height, out byte[] pixels);
-            _tileBuffer = pixels;
-
-            if (_tex2D == null || _tex2D.width != width || _tex2D.height != height)
-            {
-                if (_tex2D != null) Destroy(_tex2D);
-                _tex2D = new Texture2D(width, height, TextureFormat.RGBA32, false);
-            }
-            _texWidth = width;
-            _texHeight = height;
-            _initialized = true;
-        }
-        else if (type == FrameType.DeltaFrame)
-        {
-            if (!_initialized) return;
-            List<DirtyTile> tiles = FrameCodec.DecodeDeltaFrame(packet);
-            int tileSize = SceneConfig.TileSize;
-            if (tileSize > _texWidth) tileSize = _texWidth;
-            int rowLen = _texWidth * 4;
-            int tileRowBytes = tileSize * 4;
-            int tilesPerRow = _texWidth / tileSize;
-
-            foreach (DirtyTile tile in tiles)
-            {
-                int tileX = (tile.index % tilesPerRow) * tileSize;
-                int tileY = (tile.index / tilesPerRow) * tileSize;
-
-                for (int y = 0; y < tileSize; y++)
-                {
-                    int dstOffset = ((tileY + y) * rowLen) + tileX * 4;
-                    Buffer.BlockCopy(tile.data, y * tileRowBytes, _tileBuffer, dstOffset, tileRowBytes);
-                }
-            }
-        }
+        TryApplyGpu(packet, type);
     }
 
     byte[] UncompressPacket(byte[] packet)
@@ -296,7 +241,6 @@ public class StreamClient : MonoBehaviour
         RenderTexture rt = SceneConfig.DisplayRT;
         if (rt == null || !rt.enableRandomWrite)
         {
-            _useGpuApply = false;
             ReleasePayloadBuffer();
             return false;
         }
@@ -308,7 +252,6 @@ public class StreamClient : MonoBehaviour
 
             if (width != rt.width || height != rt.height)
             {
-                _useGpuApply = false;
                 ReleasePayloadBuffer();
                 return false;
             }
@@ -394,7 +337,6 @@ public class StreamClient : MonoBehaviour
     void OnDestroy()
     {
         Disconnect();
-        if (_tex2D != null) Destroy(_tex2D);
         ReleasePayloadBuffer();
     }
 }

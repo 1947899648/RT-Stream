@@ -13,7 +13,7 @@ public class StreamHost : MonoBehaviour
     private TcpListener _listener;
     private List<ClientConnection> _clients = new List<ClientConnection>();
     private object _clientsLock = new object();
-    private ITileSource _tileSource;
+    private GpuTileDiffer _tileSource;
     private Thread _acceptThread;
     private volatile bool _running;
     private int _texWidth, _texHeight;
@@ -23,7 +23,6 @@ public class StreamHost : MonoBehaviour
         get { lock (_clientsLock) return _clients.Count; }
     }
 
-    public string DiagDiffBackend => (_tileSource is GpuTileDiffer) ? "GPU" : "CPU";
     public int DiagReadbackBytes => _tileSource != null ? _tileSource.DiagReadbackBytes : 0;
     public int DiagDirtyTiles { get; private set; }
 
@@ -125,14 +124,7 @@ public class StreamHost : MonoBehaviour
         _texWidth = SceneConfig.TextureSize;
         _texHeight = SceneConfig.TextureSize;
 
-        if (SystemInfo.supportsComputeShaders && _tileDiffShader != null)
-        {
-            _tileSource = new GpuTileDiffer(canvas.CanvasTexture, _tileDiffShader);
-        }
-        else
-        {
-            _tileSource = new TileDiffer(canvas.CanvasTexture);
-        }
+        _tileSource = new GpuTileDiffer(canvas.CanvasTexture, _tileDiffShader);
 
         _listener = new TcpListener(IPAddress.Any, SceneConfig.Port);
         _listener.Start();

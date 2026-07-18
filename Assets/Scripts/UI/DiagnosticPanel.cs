@@ -263,7 +263,7 @@ public class DiagnosticPanel : MonoBehaviour
         _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Connected Clients: {_host.ClientCount}    Listen Port: {SceneConfig.Port}    Diff Backend: {_host.DiagDiffBackend}", _styleText);
+            $"Connected Clients: {_host.ClientCount}    Listen Port: {SceneConfig.Port}", _styleText);
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
@@ -314,7 +314,7 @@ public class DiagnosticPanel : MonoBehaviour
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Apply Backend: {_client.ApplyBackend}    Dirty Tiles Received: {_client.DirtyTilesReceived}", _styleText);
+            $"Dirty Tiles Received: {_client.DirtyTilesReceived}", _styleText);
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),

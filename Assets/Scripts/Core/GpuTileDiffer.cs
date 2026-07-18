@@ -4,7 +4,7 @@ using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-public class GpuTileDiffer : ITileSource
+public class GpuTileDiffer
 {
     public RenderTexture RT { get; private set; }
     public int TilesX { get; private set; }
