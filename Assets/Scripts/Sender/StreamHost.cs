@@ -32,6 +32,8 @@ public class StreamHost : MonoBehaviour
     public int DiagReadbackBytes => _tileSource != null ? _tileSource.DiagReadbackBytes : 0;
     public int DiagDirtyTiles { get; private set; }
 
+    public event System.Action<int[]> OnDirtyTilesDetected;
+
     private BandwidthMeter _upEncBandwidth = new BandwidthMeter();
     private BandwidthMeter _upSendBandwidth = new BandwidthMeter();
     public float UpEncMBps => _upEncBandwidth.MBps;
@@ -171,6 +173,19 @@ public class StreamHost : MonoBehaviour
 
         if (!_tileSource.TryGetResult(out List<DirtyTile> dirtyTiles, out byte[] fullFrame)) return;
         DiagDirtyTiles = dirtyTiles != null ? dirtyTiles.Count : 0;
+
+        if (fullFrame != null)
+        {
+            OnDirtyTilesDetected?.Invoke(null);
+        }
+        else if (dirtyTiles != null && dirtyTiles.Count > 0)
+        {
+            int[] indices = new int[dirtyTiles.Count];
+            for (int i = 0; i < indices.Length; i++)
+                indices[i] = dirtyTiles[i].index;
+            OnDirtyTilesDetected?.Invoke(indices);
+        }
+
         if (clientCount == 0) return;
 
         lock (_clientsLock)

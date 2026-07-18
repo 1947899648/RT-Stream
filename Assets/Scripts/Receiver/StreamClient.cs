@@ -46,6 +46,8 @@ public class StreamClient : MonoBehaviour
     public float DownRecvMBps => _downRecvBandwidth.MBps;
     public float DownProcMBps => _downProcBandwidth.MBps;
 
+    public event System.Action<int[]> OnDirtyTilesApplied;
+
     void Awake()
     {
         hostIP = SceneConfig.HostIP;
@@ -143,13 +145,40 @@ public class StreamClient : MonoBehaviour
         _skippedFrames += startIdx;
 
         int dirtyReceived = 0;
+        System.Collections.Generic.List<int> collectedIndices = new System.Collections.Generic.List<int>();
+        bool gotKeyFrame = false;
         for (int i = startIdx; i < _batch.Count; i++)
         {
-            ApplyPacket(_batch[i]);
-            if (FrameCodec.GetFrameType(_batch[i]) == FrameType.DeltaFrame)
-                dirtyReceived += BitConverter.ToUInt16(_batch[i], 1);
+            byte[] pkt = _batch[i];
+            ApplyPacket(pkt);
+            FrameType ft = FrameCodec.GetFrameType(pkt);
+            if (ft == FrameType.KeyFrame)
+            {
+                gotKeyFrame = true;
+            }
+            else if (ft == FrameType.DeltaFrame)
+            {
+                ushort tc = BitConverter.ToUInt16(pkt, 1);
+                dirtyReceived += tc;
+                int pos = FrameCodec.HeaderSize;
+                int tileBytes = SceneConfig.TileSize * SceneConfig.TileSize * 4;
+                for (int j = 0; j < tc; j++)
+                {
+                    collectedIndices.Add(BitConverter.ToInt32(pkt, pos));
+                    pos += 4 + tileBytes;
+                }
+            }
         }
         DirtyTilesReceived = dirtyReceived;
+
+        if (gotKeyFrame)
+            OnDirtyTilesApplied?.Invoke(null);
+        else if (collectedIndices.Count > 0)
+        {
+            int[] arr = new int[collectedIndices.Count];
+            collectedIndices.CopyTo(arr);
+            OnDirtyTilesApplied?.Invoke(arr);
+        }
 
         _batch.Clear();
 
