@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using Stopwatch = System.Diagnostics.Stopwatch;
 using System.Net.Sockets;
 using System.Threading;
 using UnityEngine;
@@ -54,7 +55,7 @@ public class StreamClient : MonoBehaviour
         get
         {
             if (_lastRecvWatchTimestamp == 0) return 0;
-            return (System.Diagnostics.Stopwatch.GetTimestamp() - _lastRecvWatchTimestamp) * 1000f / System.Diagnostics.Stopwatch.Frequency;
+            return (Stopwatch.GetTimestamp() - _lastRecvWatchTimestamp) * 1000f / Stopwatch.Frequency;
         }
     }
 
@@ -109,8 +110,8 @@ public class StreamClient : MonoBehaviour
         {
             _batch.Add(entry.data);
             _netLagMs = entry.netLagMs;
-            long now = System.Diagnostics.Stopwatch.GetTimestamp();
-            _localLagMs = (now - entry.recvTimestamp) * 1000f / System.Diagnostics.Stopwatch.Frequency;
+            long now = Stopwatch.GetTimestamp();
+            _localLagMs = (now - entry.recvTimestamp) * 1000f / Stopwatch.Frequency;
             _lastRecvWatchTimestamp = now;
         }
         if (_batch.Count == 0) return;
@@ -129,7 +130,7 @@ public class StreamClient : MonoBehaviour
         _skippedFrames += startIdx;
 
         int dirtyReceived = 0;
-        System.Collections.Generic.List<int> collectedIndices = new System.Collections.Generic.List<int>();
+        List<int> collectedIndices = new List<int>();
         bool gotKeyFrame = false;
         for (int i = startIdx; i < _batch.Count; i++)
         {
@@ -186,7 +187,7 @@ public class StreamClient : MonoBehaviour
                 _downRecvBandwidth.Add(frameLen);
                 long sendTicks = FrameCodec.GetTimestamp(frameData);
                 float netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
-                _frameQueue.Enqueue(new FrameEntry { data = frameData, recvTimestamp = System.Diagnostics.Stopwatch.GetTimestamp(), netLagMs = netLagMs });
+                _frameQueue.Enqueue(new FrameEntry { data = frameData, recvTimestamp = Stopwatch.GetTimestamp(), netLagMs = netLagMs });
             }
             catch
             {

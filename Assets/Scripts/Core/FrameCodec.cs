@@ -117,6 +117,4 @@ public static class FrameCodec
     {
         return (BitConverter.ToUInt16(packet, 1) & CompressFlag) != 0;
     }
-
-
 }

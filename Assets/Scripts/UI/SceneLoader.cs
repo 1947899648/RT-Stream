@@ -215,11 +215,11 @@ public class SceneLoader : MonoBehaviour
 
         try
         {
-            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (ni.OperationalStatus != OperationalStatus.Up) continue;
 
-                foreach (var addr in ni.GetIPProperties().UnicastAddresses)
+                foreach (UnicastIPAddressInformation addr in ni.GetIPProperties().UnicastAddresses)
                 {
                     if (addr.Address.AddressFamily == AddressFamily.InterNetwork)
                     {
@@ -232,8 +232,8 @@ public class SceneLoader : MonoBehaviour
 
             if (ips.Count == 1)
             {
-                var hostEntry = Dns.GetHostEntry(Dns.GetHostName());
-                foreach (var ipAddr in hostEntry.AddressList)
+                IPHostEntry hostEntry = Dns.GetHostEntry(Dns.GetHostName());
+                foreach (IPAddress ipAddr in hostEntry.AddressList)
                 {
                     if (ipAddr.AddressFamily == AddressFamily.InterNetwork)
                     {

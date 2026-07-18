@@ -6,9 +6,9 @@ using UnityEngine.Rendering;
 
 public class GpuTileDiffer
 {
-    public RenderTexture RT { get; private set; }
-    public int TilesX { get; private set; }
-    public int TilesY { get; private set; }
+    private RenderTexture RT { get; set; }
+    private int TilesX { get; set; }
+    private int TilesY { get; set; }
     public int DiagReadbackBytes { get; private set; }
 
     private int _texWidth, _texHeight;
