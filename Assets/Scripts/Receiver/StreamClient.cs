@@ -142,6 +142,9 @@ public class StreamClient : MonoBehaviour
         for (int i = startIdx; i < _batch.Count; i++)
         {
             byte[] pkt = _batch[i];
+            if (FrameCodec.IsCompressed(pkt))
+                pkt = UncompressPacket(pkt);
+
             ApplyPacket(pkt);
             FrameType ft = FrameCodec.GetFrameType(pkt);
             if (ft == FrameType.KeyFrame)
@@ -223,6 +226,10 @@ public class StreamClient : MonoBehaviour
     void ApplyPacket(byte[] packet)
     {
         _downProcBandwidth.Add(packet.Length);
+
+        if (FrameCodec.IsCompressed(packet))
+            packet = UncompressPacket(packet);
+
         FrameType type = FrameCodec.GetFrameType(packet);
         if (_useGpuApply && TryApplyGpu(packet, type)) return;
 
@@ -262,6 +269,26 @@ public class StreamClient : MonoBehaviour
                 }
             }
         }
+    }
+
+    byte[] UncompressPacket(byte[] packet)
+    {
+        int comprLen = BitConverter.ToInt32(packet, 3);
+        byte[] comprBlock = new byte[comprLen];
+        Buffer.BlockCopy(packet, FrameCodec.HeaderSize, comprBlock, 0, comprLen);
+        byte[] payload = LZ4.Unwrap(comprBlock, out int comprSz, out int decompSz);
+        FrameCodec.LastDecodeComprBytes = comprSz;
+        FrameCodec.LastDecodeDecompBytes = decompSz;
+
+        byte[] newPacket = new byte[FrameCodec.HeaderSize + payload.Length];
+        Buffer.BlockCopy(packet, 0, newPacket, 0, FrameCodec.HeaderSize);
+
+        ushort flags = BitConverter.ToUInt16(packet, 1);
+        flags &= 0x7FFF;
+        BitConverter.GetBytes(flags).CopyTo(newPacket, 1);
+        BitConverter.GetBytes((uint)payload.Length).CopyTo(newPacket, 3);
+        Buffer.BlockCopy(payload, 0, newPacket, FrameCodec.HeaderSize, payload.Length);
+        return newPacket;
     }
 
     bool TryApplyGpu(byte[] packet, FrameType type)

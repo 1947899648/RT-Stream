@@ -92,6 +92,15 @@ public class InformationDisplay : MonoBehaviour
                 $"Clients: {_host.ClientCount}  Port: {SceneConfig.Port}  Diff:{_host.DiagDiffBackend}  RB:{rbkB:F1}KB  Dirty:{_host.DiagDirtyTiles}  UpEnc:{_host.UpEncMBps:F4}MB/s  UpSend:{_host.UpSendMBps:F4}MB/s", _styleSmall);
             y += 26;
 
+            if (FrameCodec.LastEncodeComprBytes > 0)
+            {
+                float ratio = FrameCodec.LastEncodeComprBytes * 100f / FrameCodec.LastEncodeOrigBytes;
+                _styleSmall.normal.textColor = new Color(0.8f, 0.8f, 1f);
+                GUI.Label(new Rect(0, y, Screen.width, 22),
+                    $"LZ4: {FrameCodec.LastEncodeOrigBytes / 1024f:F1} → {FrameCodec.LastEncodeComprBytes / 1024f:F1} KB  ({ratio:F0}%)", _styleSmall);
+                y += 26;
+            }
+
             string diag = _host.GetClientDiagnostics();
             if (!string.IsNullOrEmpty(diag))
             {
@@ -106,6 +115,15 @@ public class InformationDisplay : MonoBehaviour
                 _client.IsConnected
                     ? $"Connected  {SceneConfig.HostIP}:{SceneConfig.Port}  batch:{_client.LastBatchSize} skip:{_client.SkippedFrames}  Apply:{_client.ApplyBackend}  Rcv:{_client.DirtyTilesReceived}  Net:{_client.NetLagMs:F0}ms  Loc:{_client.LocalLagMs:F0}ms  Idle:{_client.SilenceMs:F0}ms  DownRecv:{_client.DownRecvMBps:F4}MB/s  DownProc:{_client.DownProcMBps:F4}MB/s"
                     : "Disconnected", _styleSmall);
+            y += 26;
+
+            if (_client.IsConnected && FrameCodec.LastDecodeDecompBytes > 0)
+            {
+                float ratio = FrameCodec.LastDecodeDecompBytes / (float)FrameCodec.LastDecodeComprBytes;
+                _styleSmall.normal.textColor = new Color(0.8f, 0.8f, 1f);
+                GUI.Label(new Rect(0, y, Screen.width, 22),
+                    $"LZ4: {FrameCodec.LastDecodeComprBytes / 1024f:F1} → {FrameCodec.LastDecodeDecompBytes / 1024f:F1} KB  (×{ratio:F1})", _styleSmall);
+            }
         }
 
         DrawHardwareInfo();
