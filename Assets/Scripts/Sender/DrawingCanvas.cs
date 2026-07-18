@@ -39,7 +39,7 @@ public class DrawingCanvas : MonoBehaviour
     {
         int size = SceneConfig.TextureSize;
         if (size < 64) size = 64;
-        if (size > 4096) size = 4096;
+        if (size > 8192) size = 8192;
 
         _canvasRT = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32)
         {

@@ -17,7 +17,7 @@ public class RTStreamReceiver : MonoBehaviour
     {
         int size = SceneConfig.TextureSize;
         if (size < 64) size = 64;
-        if (size > 4096) size = 4096;
+        if (size > 8192) size = 8192;
 
         if (SceneConfig.DisplayRT == null || SceneConfig.DisplayRT.width != size || SceneConfig.DisplayRT.height != size
             || !SceneConfig.DisplayRT.enableRandomWrite)

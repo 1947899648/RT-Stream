@@ -194,7 +194,7 @@ public class StreamClient : MonoBehaviour
             {
                 if (!ReadExact(_stream, lenBuf, 0, 4)) break;
                 int frameLen = BitConverter.ToInt32(lenBuf, 0);
-                if (frameLen <= 0 || frameLen > 64 * 1024 * 1024) break;
+                if (frameLen <= 0) break;
 
                 byte[] frameData = new byte[frameLen];
                 if (!ReadExact(_stream, frameData, 0, frameLen)) break;

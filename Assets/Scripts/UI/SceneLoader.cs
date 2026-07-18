@@ -36,8 +36,16 @@ public class SceneLoader : MonoBehaviour
         _ipDropdown.onValueChanged.AddListener(OnIPDropdownChanged);
         CreateIPInputField();
 
-        if (_sizeDropdown != null && _sizeDropdown.options.Count > 0)
+        if (_sizeDropdown != null)
+        {
+            _sizeDropdown.options.Clear();
+            _sizeDropdown.options.Add(new Dropdown.OptionData("512"));
+            _sizeDropdown.options.Add(new Dropdown.OptionData("1024"));
+            _sizeDropdown.options.Add(new Dropdown.OptionData("2048"));
+            _sizeDropdown.options.Add(new Dropdown.OptionData("4096"));
+            _sizeDropdown.options.Add(new Dropdown.OptionData("8192"));
             _sizeDropdown.value = 0;
+        }
     }
 
     void Update()
@@ -85,7 +93,7 @@ public class SceneLoader : MonoBehaviour
         if (_sizeDropdown != null && _sizeDropdown.options.Count > 0)
         {
             string sizeText = _sizeDropdown.options[_sizeDropdown.value].text;
-            if (int.TryParse(sizeText, out int s) && s >= 64 && s <= 4096)
+            if (int.TryParse(sizeText, out int s) && s >= 64 && s <= 8192)
                 SceneConfig.TextureSize = s;
         }
     }

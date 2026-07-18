@@ -35,7 +35,7 @@ public static class LZ4
     {
         decompressedSize = BitConverter.ToInt32(input, 0);
 
-        if (decompressedSize <= 0 || decompressedSize > 64 * 1024 * 1024)
+        if (decompressedSize <= 0 || decompressedSize > 1024 * 1024 * 1024)
             throw new InvalidOperationException("LZ4 Unwrap: invalid decompressed size");
 
         compressedSize = input.Length - 4;

@@ -28,6 +28,7 @@ public class TileVisualizer : MonoBehaviour
         _tilesX = SceneConfig.TextureSize / tileSize;
         _tilesY = _tilesX;
         _tilePixel = _mapSize / _tilesX;
+        if (_tilePixel < 1) _tilePixel = 1;
         BuildGridTexture();
     }
 
