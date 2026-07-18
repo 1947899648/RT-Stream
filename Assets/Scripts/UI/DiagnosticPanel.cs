@@ -5,7 +5,7 @@ using UnityEngine.SceneManagement;
 public class DiagnosticPanel : MonoBehaviour
 {
     [SerializeField] private int _mapWidth = 220;
-    [SerializeField] private int _panelWidth = 540;
+    [SerializeField] private int _panelWidth = 620;
     [SerializeField] private Color _gridColor = new Color(0, 1, 0, 0.25f);
     [SerializeField] private Color _dirtyColor = new Color(1, 0, 0, 0.5f);
     [SerializeField] private Color _bgColor = new Color(0, 0, 0, 0.65f);
@@ -132,7 +132,7 @@ public class DiagnosticPanel : MonoBehaviour
 
         if (_host != null)
         {
-            h += _lineH * 3;
+            h += _lineH * 5;
             if (FrameCodec.LastEncodeComprBytes > 0) h += _lineH;
             if (!string.IsNullOrEmpty(_host.GetClientDiagnostics())) h += _lineH;
             h += 4;
@@ -143,7 +143,7 @@ public class DiagnosticPanel : MonoBehaviour
                 h += _lineH;
             else
             {
-                h += _lineH * 4;
+                h += _lineH * 6;
                 if (FrameCodec.LastDecodeDecompBytes > 0) h += _lineH;
             }
             h += 4;
@@ -208,27 +208,28 @@ public class DiagnosticPanel : MonoBehaviour
 
     int DrawRTInfo(int x, int y)
     {
-        _styleText.normal.textColor = Color.white;
+        _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
 
         if (_canvas != null)
         {
             int size = SceneConfig.TextureSize;
             int rtMem = size * size * 4;
             int t = size / SceneConfig.TileSize;
+            string fmt = _canvas.CanvasTexture != null ? _canvas.CanvasTexture.format.ToString() : "RGBA32";
 
             GUI.Label(new Rect(x, y, _panelWidth, 22),
-                $"RT: {size}×{size}  RGBA32  {rtMem / 1024f / 1024f:F1} MB", _styleText);
+                $"Render Texture: {size}×{size}  {fmt}  {rtMem / 1024f / 1024f:F1} MB", _styleText);
             y += _lineH;
 
             GUI.Label(new Rect(x, y, _panelWidth, 22),
-                $"Tiles: {t}×{t} ({t * t})  {SceneConfig.TileSize}px", _styleText);
+                $"Tile Grid: {t}×{t} ({t * t} tiles)  {SceneConfig.TileSize} px", _styleText);
             y += _lineH + 4;
         }
         else if (_client != null && SceneConfig.DisplayRT != null)
         {
             int rtMem = SceneConfig.DisplayRT.width * SceneConfig.DisplayRT.height * 4;
             GUI.Label(new Rect(x, y, _panelWidth, 22),
-                $"RT: {SceneConfig.DisplayRT.width}×{SceneConfig.DisplayRT.height}  {SceneConfig.DisplayRT.format}  {rtMem / 1024f / 1024f:F1} MB", _styleText);
+                $"Render Texture: {SceneConfig.DisplayRT.width}×{SceneConfig.DisplayRT.height}  {SceneConfig.DisplayRT.format}  {rtMem / 1024f / 1024f:F1} MB", _styleText);
             y += _lineH + 4;
         }
 
@@ -259,18 +260,26 @@ public class DiagnosticPanel : MonoBehaviour
     {
         float rbkB = _host.DiagReadbackBytes / 1024f;
 
-        _styleText.normal.textColor = new Color(0.7f, 1f, 0.7f);
+        _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Clients: {_host.ClientCount}  Port: {SceneConfig.Port}  Backend: {_host.DiagDiffBackend}", _styleText);
+            $"Connected Clients: {_host.ClientCount}    Listen Port: {SceneConfig.Port}    Diff Backend: {_host.DiagDiffBackend}", _styleText);
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Dirty: {_host.DiagDirtyTiles}  Readback: {rbkB:F1} KB", _styleText);
+            $"Dirty Tiles Detected: {_host.DiagDirtyTiles}    GPU Readback: {rbkB:F1} KB", _styleText);
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Up Enc: {_host.UpEncMBps:F4} MB/s  Up Send: {_host.UpSendMBps:F4} MB/s", _styleText);
+            $"Raw Dirty Bandwidth: {_host.RawDirtyMBps:F4} MB/s", _styleText);
+        y += _lineH;
+
+        GUI.Label(new Rect(x, y, _panelWidth, 22),
+            $"Encode Bandwidth: {_host.UpEncMBps:F4} MB/s", _styleText);
+        y += _lineH;
+
+        GUI.Label(new Rect(x, y, _panelWidth, 22),
+            $"Send Bandwidth: {_host.UpSendMBps:F4} MB/s", _styleText);
         y += _lineH;
 
         y = DrawLZ4EncodeLine(x, y);
@@ -295,22 +304,29 @@ public class DiagnosticPanel : MonoBehaviour
             return y + _lineH + 4;
         }
 
-        _styleText.normal.textColor = Color.green;
+        _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Connected  {SceneConfig.HostIP}:{SceneConfig.Port}", _styleText);
-        y += _lineH;
-
-        _styleText.normal.textColor = new Color(0.7f, 0.7f, 1f);
-        GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Batch: {_client.LastBatchSize}  Skip: {_client.SkippedFrames}  Backend: {_client.ApplyBackend}  Dirty: {_client.DirtyTilesReceived}", _styleText);
+            $"Connection: {SceneConfig.HostIP}:{SceneConfig.Port}", _styleText);
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Down Recv: {_client.DownRecvMBps:F4} MB/s  Down Proc: {_client.DownProcMBps:F4} MB/s", _styleText);
+            $"Frame Batch Size: {_client.LastBatchSize}    Skipped Frames: {_client.SkippedFrames}", _styleText);
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Net: {_client.NetLagMs:F0} ms  Local: {_client.LocalLagMs:F0} ms  Idle: {_client.SilenceMs:F0} ms", _styleText);
+            $"Apply Backend: {_client.ApplyBackend}    Dirty Tiles Received: {_client.DirtyTilesReceived}", _styleText);
+        y += _lineH;
+
+        GUI.Label(new Rect(x, y, _panelWidth, 22),
+            $"Receive Bandwidth: {_client.DownRecvMBps:F4} MB/s", _styleText);
+        y += _lineH;
+
+        GUI.Label(new Rect(x, y, _panelWidth, 22),
+            $"Process Bandwidth: {_client.DownProcMBps:F4} MB/s", _styleText);
+        y += _lineH;
+
+        GUI.Label(new Rect(x, y, _panelWidth, 22),
+            $"Network Latency: {_client.NetLagMs:F0} ms    Local Latency: {_client.LocalLagMs:F0} ms    Silence: {_client.SilenceMs:F0} ms", _styleText);
         y += _lineH;
 
         y = DrawLZ4DecodeLine(x, y);
@@ -325,7 +341,7 @@ public class DiagnosticPanel : MonoBehaviour
         float ratio = FrameCodec.LastEncodeComprBytes * 100f / FrameCodec.LastEncodeOrigBytes;
         _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"LZ4: {FrameCodec.LastEncodeOrigBytes / 1024f:F1} → {FrameCodec.LastEncodeComprBytes / 1024f:F1} KB ({ratio:F0}%)", _styleText);
+            $"LZ4 Compress: {FrameCodec.LastEncodeOrigBytes / 1024f:F1} KB → {FrameCodec.LastEncodeComprBytes / 1024f:F1} KB    Ratio: {ratio:F0}%", _styleText);
         return y + _lineH;
     }
 
@@ -336,36 +352,33 @@ public class DiagnosticPanel : MonoBehaviour
         float ratio = (float)FrameCodec.LastDecodeDecompBytes / FrameCodec.LastDecodeComprBytes;
         _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"LZ4: {FrameCodec.LastDecodeComprBytes / 1024f:F1} → {FrameCodec.LastDecodeDecompBytes / 1024f:F1} KB (×{ratio:F1})", _styleText);
+            $"LZ4 Decompress: {FrameCodec.LastDecodeComprBytes / 1024f:F1} KB → {FrameCodec.LastDecodeDecompBytes / 1024f:F1} KB    Ratio: ×{ratio:F1}", _styleText);
         return y + _lineH;
     }
 
     int DrawHardwareInfo(int x, int y)
     {
-        _styleText.normal.textColor = Color.white;
+        _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
 
         string cpuLine = string.IsNullOrEmpty(SystemInfo.processorType)
-            ? "CPU: Unknown"
-            : $"CPU: {SystemInfo.processorType}";
+            ? "Processor: Unknown"
+            : $"Processor: {SystemInfo.processorType}";
         GUI.Label(new Rect(x, y, _panelWidth, 22), cpuLine, _styleText);
         y += _lineH;
 
-        _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"GPU: {SystemInfo.graphicsDeviceName} ({SystemInfo.graphicsDeviceType})", _styleText);
+            $"GPU Device: {SystemInfo.graphicsDeviceName} ({SystemInfo.graphicsDeviceType})", _styleText);
         y += _lineH;
-
-        _styleText.normal.textColor = Color.white;
 
         string memLine;
         if (SystemInfo.systemMemorySize > 0 && SystemInfo.graphicsMemorySize > 0)
-            memLine = $"RAM: {SystemInfo.systemMemorySize} MB    VRAM: {SystemInfo.graphicsMemorySize} MB";
+            memLine = $"System RAM: {SystemInfo.systemMemorySize} MB    VRAM: {SystemInfo.graphicsMemorySize} MB";
         else if (SystemInfo.systemMemorySize > 0)
-            memLine = $"RAM: {SystemInfo.systemMemorySize} MB    VRAM: -- MB";
+            memLine = $"System RAM: {SystemInfo.systemMemorySize} MB    VRAM: -- MB";
         else if (SystemInfo.graphicsMemorySize > 0)
-            memLine = $"RAM: -- MB    VRAM: {SystemInfo.graphicsMemorySize} MB";
+            memLine = $"System RAM: -- MB    VRAM: {SystemInfo.graphicsMemorySize} MB";
         else
-            memLine = "RAM: -- MB    VRAM: -- MB";
+            memLine = "System RAM: -- MB    VRAM: -- MB";
 
         GUI.Label(new Rect(x, y, _panelWidth, 22), memLine, _styleText);
         y += _lineH;
@@ -373,7 +386,7 @@ public class DiagnosticPanel : MonoBehaviour
         bool csSupported = SystemInfo.supportsComputeShaders;
         _styleText.normal.textColor = csSupported ? Color.green : Color.red;
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            csSupported ? "Compute Shader: Supported" : "Compute Shader: NOT Supported", _styleText);
+            csSupported ? "Compute Shader Support: Yes" : "Compute Shader Support: No", _styleText);
         y += _lineH + 4;
 
         return y + 6;

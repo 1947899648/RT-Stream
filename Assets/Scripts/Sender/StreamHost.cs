@@ -29,8 +29,10 @@ public class StreamHost : MonoBehaviour
 
     public event System.Action<int[]> OnDirtyTilesDetected;
 
+    private BandwidthMeter _rawDirtyBandwidth = new BandwidthMeter();
     private BandwidthMeter _upEncBandwidth = new BandwidthMeter();
     private BandwidthMeter _upSendBandwidth = new BandwidthMeter();
+    public float RawDirtyMBps => _rawDirtyBandwidth.MBps;
     public float UpEncMBps => _upEncBandwidth.MBps;
     public float UpSendMBps => _upSendBandwidth.MBps;
 
@@ -177,6 +179,8 @@ public class StreamHost : MonoBehaviour
         {
             if (fullFrame != null)
             {
+                int rawBytes = 8 + fullFrame.Length;
+                _rawDirtyBandwidth.Add(rawBytes);
                 byte[] keyPacket = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, fullFrame);
                 _upEncBandwidth.Add(keyPacket.Length);
                 foreach (ClientConnection c in _clients)
@@ -188,6 +192,9 @@ public class StreamHost : MonoBehaviour
             }
             else if (dirtyTiles != null && dirtyTiles.Count > 0)
             {
+                int tileDataBytes = SceneConfig.TileSize * SceneConfig.TileSize * 4;
+                int rawBytes = dirtyTiles.Count * (4 + tileDataBytes);
+                _rawDirtyBandwidth.Add(rawBytes);
                 byte[] deltaPacket = FrameCodec.EncodeDeltaFrame(dirtyTiles);
                 _upEncBandwidth.Add(deltaPacket.Length);
                 foreach (ClientConnection c in _clients)
@@ -198,6 +205,7 @@ public class StreamHost : MonoBehaviour
             }
         }
 
+        _rawDirtyBandwidth.Sample();
         _upEncBandwidth.Sample();
         _upSendBandwidth.Sample();
     }
