@@ -8,7 +8,6 @@ using UnityEngine;
 
 public class StreamHost : MonoBehaviour
 {
-    public int port = 7777;
     [SerializeField] private ComputeShader _tileDiffShader;
 
     private TcpListener _listener;
@@ -133,7 +132,7 @@ public class StreamHost : MonoBehaviour
             _tileSource = new TileDiffer(canvas.CanvasTexture);
         }
 
-        _listener = new TcpListener(IPAddress.Any, port);
+        _listener = new TcpListener(IPAddress.Any, SceneConfig.Port);
         _listener.Start();
         _running = true;
         _acceptThread = new Thread(AcceptLoop) { IsBackground = true };

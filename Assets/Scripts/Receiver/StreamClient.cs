@@ -7,8 +7,6 @@ using UnityEngine;
 
 public class StreamClient : MonoBehaviour
 {
-    public string hostIP;
-    public int port;
     [SerializeField] private ComputeShader _tileApplyShader;
 
     private struct FrameEntry
@@ -48,12 +46,6 @@ public class StreamClient : MonoBehaviour
 
     public event System.Action<int[]> OnDirtyTilesApplied;
 
-    void Awake()
-    {
-        hostIP = SceneConfig.HostIP;
-        port = SceneConfig.Port;
-    }
-
     public bool IsConnected => _connected;
     public int SkippedFrames => _skippedFrames;
     public int LastBatchSize => _lastBatchSize;
@@ -88,7 +80,7 @@ public class StreamClient : MonoBehaviour
         try
         {
             _tcpClient = new TcpClient();
-            _tcpClient.Connect(hostIP, port);
+            _tcpClient.Connect(SceneConfig.HostIP, SceneConfig.Port);
             _stream = _tcpClient.GetStream();
             _connected = true;
             _running = true;
