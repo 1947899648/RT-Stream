@@ -9,15 +9,12 @@ using UnityEngine;
 public class StreamHost : MonoBehaviour
 {
     public int port = 7777;
-    public int keyFrameInterval = 30;
-    [SerializeField] private int _maxQueueDepth = 8;
     [SerializeField] private ComputeShader _tileDiffShader;
 
     private TcpListener _listener;
     private List<ClientConnection> _clients = new List<ClientConnection>();
     private object _clientsLock = new object();
     private ITileSource _tileSource;
-    private int _seq;
     private Thread _acceptThread;
     private volatile bool _running;
     private int _texWidth, _texHeight;
@@ -27,7 +24,6 @@ public class StreamHost : MonoBehaviour
         get { lock (_clientsLock) return _clients.Count; }
     }
 
-    public int DiagSeq => _seq;
     public string DiagDiffBackend => (_tileSource is GpuTileDiffer) ? "GPU" : "CPU";
     public int DiagReadbackBytes => _tileSource != null ? _tileSource.DiagReadbackBytes : 0;
     public int DiagDirtyTiles { get; private set; }
@@ -43,20 +39,17 @@ public class StreamHost : MonoBehaviour
     {
         public volatile bool Alive = true;
         public bool NeedKeyFrame = true;
-        public int DroppedFrames;
 
         private TcpClient _client;
         private Thread _sendThread;
         private Queue<byte[]> _queue = new Queue<byte[]>();
         private object _lock = new object();
-        private int _maxDepth;
         private byte[] _lenBuf = new byte[4];
         private BandwidthMeter _sendMeter;
 
-        public ClientConnection(TcpClient client, int maxDepth, BandwidthMeter sendMeter)
+        public ClientConnection(TcpClient client, BandwidthMeter sendMeter)
         {
             _client = client;
-            _maxDepth = maxDepth;
             _sendMeter = sendMeter;
             try { _client.NoDelay = true; } catch { }
             _sendThread = new Thread(SendLoop) { IsBackground = true };
@@ -75,13 +68,6 @@ public class StreamHost : MonoBehaviour
                 if (isKeyFrame)
                 {
                     _queue.Clear();
-                }
-                else if (_queue.Count >= _maxDepth)
-                {
-                    _queue.Clear();
-                    NeedKeyFrame = true;
-                    DroppedFrames++;
-                    return;
                 }
                 _queue.Enqueue(packet);
                 Monitor.Pulse(_lock);
@@ -168,7 +154,7 @@ public class StreamHost : MonoBehaviour
             }
         }
 
-        bool wantKeyFrame = anyNeedKeyFrame || (_seq > 0 && _seq % keyFrameInterval == 0);
+        bool wantKeyFrame = anyNeedKeyFrame;
         _tileSource.Update(wantKeyFrame);
 
         if (!_tileSource.TryGetResult(out List<DirtyTile> dirtyTiles, out byte[] fullFrame)) return;
@@ -200,7 +186,6 @@ public class StreamHost : MonoBehaviour
                     c.NeedKeyFrame = false;
                     c.Enqueue(keyPacket, true);
                 }
-                _seq++;
             }
             else if (dirtyTiles != null && dirtyTiles.Count > 0)
             {
@@ -211,7 +196,6 @@ public class StreamHost : MonoBehaviour
                     if (!c.Alive) continue;
                     c.Enqueue(deltaPacket, false);
                 }
-                _seq++;
             }
         }
 
@@ -236,7 +220,7 @@ public class StreamHost : MonoBehaviour
             try
             {
                 TcpClient client = _listener.AcceptTcpClient();
-                ClientConnection conn = new ClientConnection(client, _maxQueueDepth, _upSendBandwidth);
+                ClientConnection conn = new ClientConnection(client, _upSendBandwidth);
                 lock (_clientsLock)
                 {
                     _clients.Add(conn);
@@ -265,8 +249,7 @@ public class StreamHost : MonoBehaviour
                 if (i > 0) sb.Append("    ");
                 ClientConnection c = _clients[i];
                 sb.Append('C').Append(i)
-                  .Append(" queue:").Append(c.QueueDepth)
-                  .Append(" drop:").Append(c.DroppedFrames);
+                  .Append(" queue:").Append(c.QueueDepth);
             }
             return sb.ToString();
         }
