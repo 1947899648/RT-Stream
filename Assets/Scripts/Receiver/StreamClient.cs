@@ -1,9 +1,6 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Stopwatch = System.Diagnostics.Stopwatch;
-using System.Net.Sockets;
-using System.Threading;
 using UnityEngine;
 
 public class StreamClient : MonoBehaviour
@@ -14,19 +11,13 @@ public class StreamClient : MonoBehaviour
     {
         public byte[] data;
         public long recvTimestamp;
-        public float netLagMs;
     }
 
-    private TcpClient _tcpClient;
-    private NetworkStream _stream;
-    private Thread _receiveThread;
-    private ConcurrentQueue<FrameEntry> _frameQueue = new ConcurrentQueue<FrameEntry>();
+    private Telepathy.Client _client;
+    private List<FrameEntry> _batch = new List<FrameEntry>();
     private bool _connected;
-    private bool _running;
-
     private bool _initialized;
     private int _texWidth, _texHeight;
-    private List<byte[]> _batch = new List<byte[]>();
     private int _skippedFrames;
     private int _lastBatchSize;
 
@@ -64,56 +55,45 @@ public class StreamClient : MonoBehaviour
         Disconnect();
         _skippedFrames = 0;
         _lastBatchSize = 0;
+        _texWidth = SceneConfig.TextureSize;
+        _texHeight = SceneConfig.TextureSize;
+        _initialized = true;
         _downRecvBandwidth.Reset();
         _downProcBandwidth.Reset();
 
         _kApplyFull = _tileApplyShader.FindKernel("KApplyFull");
         _kApplyDelta = _tileApplyShader.FindKernel("KApplyDelta");
 
-        try
+        int maxMsgSize = 256 * 1024;
+        _client = new Telepathy.Client(maxMsgSize);
+        _client.OnConnected = () => _connected = true;
+        _client.OnData = (data) =>
         {
-            _tcpClient = new TcpClient();
-            _tcpClient.Connect(SceneConfig.HostIP, SceneConfig.Port);
-            _stream = _tcpClient.GetStream();
-            _connected = true;
-            _running = true;
-            _receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
-            _receiveThread.Start();
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"StreamClient connect failed: {e.Message}");
-            Close();
-        }
+            byte[] copy = new byte[data.Count];
+            Buffer.BlockCopy(data.Array, data.Offset, copy, 0, data.Count);
+            _batch.Add(new FrameEntry { data = copy, recvTimestamp = Stopwatch.GetTimestamp() });
+            _downRecvBandwidth.Add(data.Count);
+        };
+        _client.OnDisconnected = () => _connected = false;
+        _client.Connect(SceneConfig.HostIP, SceneConfig.Port);
     }
 
     public void Disconnect()
     {
-        _running = false;
         _connected = false;
         _initialized = false;
-        _receiveThread?.Join(500);
-        Close();
-        while (_frameQueue.TryDequeue(out FrameEntry _)) { }
+        _client?.Disconnect();
         _batch.Clear();
         ReleasePayloadBuffer();
     }
 
     void Update()
     {
-        if (!_connected) return;
+        _client?.Tick(100);
 
         _downRecvBandwidth.Sample();
         _downProcBandwidth.Sample();
 
-        while (_frameQueue.TryDequeue(out FrameEntry entry))
-        {
-            _batch.Add(entry.data);
-            _netLagMs = entry.netLagMs;
-            long now = Stopwatch.GetTimestamp();
-            _localLagMs = (now - entry.recvTimestamp) * 1000f / Stopwatch.Frequency;
-            _lastRecvWatchTimestamp = now;
-        }
         if (_batch.Count == 0) return;
 
         _lastBatchSize = _batch.Count;
@@ -121,7 +101,7 @@ public class StreamClient : MonoBehaviour
         int startIdx = 0;
         for (int i = _batch.Count - 1; i >= 0; i--)
         {
-            if (FrameCodec.GetFrameType(_batch[i]) == FrameType.KeyFrame)
+            if (FrameCodec.GetFrameType(_batch[i].data) == FrameType.KeyFrame)
             {
                 startIdx = i;
                 break;
@@ -132,9 +112,12 @@ public class StreamClient : MonoBehaviour
         int dirtyReceived = 0;
         List<int> collectedIndices = new List<int>();
         bool gotKeyFrame = false;
+
         for (int i = startIdx; i < _batch.Count; i++)
         {
-            byte[] pkt = _batch[i];
+            byte[] pkt = _batch[i].data;
+            long recvTs = _batch[i].recvTimestamp;
+
             if (FrameCodec.IsCompressed(pkt))
                 pkt = UncompressPacket(pkt);
 
@@ -156,6 +139,11 @@ public class StreamClient : MonoBehaviour
                     pos += 4 + tileBytes;
                 }
             }
+
+            long sendTicks = FrameCodec.GetTimestamp(pkt);
+            _netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
+            _localLagMs = (Stopwatch.GetTimestamp() - recvTs) * 1000f / Stopwatch.Frequency;
+            _lastRecvWatchTimestamp = Stopwatch.GetTimestamp();
         }
         DirtyTilesReceived = dirtyReceived;
 
@@ -169,44 +157,6 @@ public class StreamClient : MonoBehaviour
         }
 
         _batch.Clear();
-    }
-
-    void ReceiveLoop()
-    {
-        byte[] lenBuf = new byte[4];
-        while (_running && _tcpClient != null && _tcpClient.Connected)
-        {
-            try
-            {
-                if (!ReadExact(_stream, lenBuf, 0, 4)) break;
-                int frameLen = BitConverter.ToInt32(lenBuf, 0);
-                if (frameLen <= 0) break;
-
-                byte[] frameData = new byte[frameLen];
-                if (!ReadExact(_stream, frameData, 0, frameLen)) break;
-                _downRecvBandwidth.Add(frameLen);
-                long sendTicks = FrameCodec.GetTimestamp(frameData);
-                float netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
-                _frameQueue.Enqueue(new FrameEntry { data = frameData, recvTimestamp = Stopwatch.GetTimestamp(), netLagMs = netLagMs });
-            }
-            catch
-            {
-                break;
-            }
-        }
-        _connected = false;
-    }
-
-    bool ReadExact(NetworkStream s, byte[] buf, int offset, int count)
-    {
-        int received = 0;
-        while (received < count)
-        {
-            int n = s.Read(buf, offset + received, count - received);
-            if (n <= 0) return false;
-            received += n;
-        }
-        return true;
     }
 
     void ApplyPacket(byte[] packet)
@@ -325,14 +275,6 @@ public class StreamClient : MonoBehaviour
     {
         _payloadBuffer?.Release();
         _payloadBuffer = null;
-    }
-
-    void Close()
-    {
-        _stream?.Close();
-        _tcpClient?.Close();
-        _stream = null;
-        _tcpClient = null;
     }
 
     void OnDestroy()

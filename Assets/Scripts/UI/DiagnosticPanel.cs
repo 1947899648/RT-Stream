@@ -39,6 +39,10 @@ public class DiagnosticPanel : MonoBehaviour
         _instance = this;
         DontDestroyOnLoad(gameObject);
 
+        Telepathy.Log.Info = Debug.Log;
+        Telepathy.Log.Warning = Debug.LogWarning;
+        Telepathy.Log.Error = Debug.LogError;
+
         _styleFPS = new GUIStyle { fontSize = 36, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperLeft };
         _styleRole = new GUIStyle { fontSize = 18, fontStyle = FontStyle.Normal, alignment = TextAnchor.UpperLeft };
         _styleSection = new GUIStyle { fontSize = 18, fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperLeft };
