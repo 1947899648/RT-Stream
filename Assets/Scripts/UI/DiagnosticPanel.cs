@@ -15,7 +15,7 @@ public class DiagnosticPanel : MonoBehaviour
     private float _deltaTime;
 
     private string _role;
-    private DrawingCanvas _canvas;
+    private DrawableSurface _canvas;
     private StreamHost _host;
     private StreamClient _client;
 
@@ -107,7 +107,6 @@ public class DiagnosticPanel : MonoBehaviour
     void OnDestroy()
     {
         if (_host != null) _host.OnDirtyTilesDetected -= OnDirtyTiles;
-        if (_client != null) _client.OnDirtyTilesApplied -= OnDirtyTiles;
         if (_gridTex != null) Destroy(_gridTex);
         if (_whiteTex != null) Destroy(_whiteTex);
     }
@@ -444,9 +443,8 @@ public class DiagnosticPanel : MonoBehaviour
     void DetectRole()
     {
         if (_host != null) _host.OnDirtyTilesDetected -= OnDirtyTiles;
-        if (_client != null) _client.OnDirtyTilesApplied -= OnDirtyTiles;
 
-        _canvas = FindObjectOfType<DrawingCanvas>();
+        _canvas = FindObjectOfType<DrawableSurface>();
         _host = FindObjectOfType<StreamHost>();
         _client = FindObjectOfType<StreamClient>();
 
@@ -458,7 +456,6 @@ public class DiagnosticPanel : MonoBehaviour
             _role = "Idle";
 
         if (_host != null) _host.OnDirtyTilesDetected += OnDirtyTiles;
-        if (_client != null) _client.OnDirtyTilesApplied += OnDirtyTiles;
     }
 
     void EnsureGridTexture()

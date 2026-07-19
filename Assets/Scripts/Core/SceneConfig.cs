@@ -3,6 +3,7 @@ using UnityEngine;
 public static class SceneConfig
 {
     public static string HostIP = "127.0.0.1";
+    public static string ServerIP = "127.0.0.1";
     public static int Port = 7777;
     public static int TextureSize = 512;
     // 固定 64px 而非动态计算（原：TextureSize / 8），原因：

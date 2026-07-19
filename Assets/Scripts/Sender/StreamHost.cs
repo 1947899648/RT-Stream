@@ -30,7 +30,7 @@ public class StreamHost : MonoBehaviour
 
     void Start()
     {
-        DrawingCanvas canvas = FindObjectOfType<DrawingCanvas>();
+        DrawableSurface canvas = FindObjectOfType<DrawableSurface>();
         _texWidth = SceneConfig.TextureSize;
         _texHeight = SceneConfig.TextureSize;
 

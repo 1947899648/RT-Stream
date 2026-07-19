@@ -1,170 +1,265 @@
 using System;
 using System.Collections.Generic;
-using Stopwatch = System.Diagnostics.Stopwatch;
 using UnityEngine;
 
 public class StreamClient : MonoBehaviour
 {
     [SerializeField] private ComputeShader _tileApplyShader;
-
-    private struct FrameEntry
-    {
-        public byte[] data;
-        public long recvTimestamp;
-    }
+    [SerializeField] private DrawableSurface _surface3D;
+    [SerializeField] private DrawableSurface _surfaceUI;
 
     private Telepathy.Client _client;
-    private List<FrameEntry> _batch = new List<FrameEntry>();
+    private int _myClientId;
     private bool _connected;
-    private bool _initialized;
-    private int _texWidth, _texHeight;
-    private int _skippedFrames;
-    private int _lastBatchSize;
+    private bool _inRoom;
+    private int _myRoomId;
 
-    private ComputeBuffer _payloadBuffer;
+    private RenderTexture _displayRT_3D, _displayRT_UI;
+    private ComputeBuffer _payloadBuffer_3D, _payloadBuffer_UI;
     private int _kApplyFull, _kApplyDelta;
+    private int _texWidth, _texHeight;
+    private bool _initialized3D, _initializedUI;
 
-    private float _netLagMs;
-    private float _localLagMs;
-    private long _lastRecvWatchTimestamp;
+    private List<byte[]> _batch3D = new List<byte[]>();
+    private List<byte[]> _batchUI = new List<byte[]>();
 
     private BandwidthMeter _downRecvBandwidth = new BandwidthMeter();
     private BandwidthMeter _downProcBandwidth = new BandwidthMeter();
+
+    public event Action<List<RoomInfo>> OnRoomListReceived;
+    public event Action OnRoomJoined;
+    public event Action OnRoomLeft;
+
+    public bool IsConnected => _connected;
+    public bool InRoom => _inRoom;
+    public int MyRoomId => _myRoomId;
+    public RenderTexture DisplayRT_3D => _displayRT_3D;
+    public RenderTexture DisplayRT_UI => _displayRT_UI;
     public float DownRecvMBps => _downRecvBandwidth.MBps;
     public float DownProcMBps => _downProcBandwidth.MBps;
 
-    public event System.Action<int[]> OnDirtyTilesApplied;
-
-    public bool IsConnected => _connected;
-    public int SkippedFrames => _skippedFrames;
-    public int LastBatchSize => _lastBatchSize;
+    public int LastBatchSize => _batch3D.Count + _batchUI.Count;
+    public int SkippedFrames => 0;
     public int DirtyTilesReceived { get; private set; }
-    public float NetLagMs => _netLagMs;
-    public float LocalLagMs => _localLagMs;
-    public float SilenceMs
+    public float NetLagMs => 0f;
+    public float LocalLagMs => 0f;
+    public float SilenceMs => 0f;
+
+    void Awake()
     {
-        get
+        _kApplyFull = _tileApplyShader.FindKernel("KApplyFull");
+        _kApplyDelta = _tileApplyShader.FindKernel("KApplyDelta");
+
+        int size = SceneConfig.TextureSize;
+        _texWidth = size;
+        _texHeight = size;
+
+        _displayRT_3D = CreateDisplayRT(size);
+        _displayRT_UI = CreateDisplayRT(size);
+
+        if (_surface3D != null)
         {
-            if (_lastRecvWatchTimestamp == 0) return 0;
-            return (Stopwatch.GetTimestamp() - _lastRecvWatchTimestamp) * 1000f / Stopwatch.Frequency;
+            _surface3D.Initialize(_displayRT_3D);
+            _surface3D.IsAuthoritative = false;
+            _surface3D.OnUserDraw += (c, s, pts) => SendDrawingCmd(0, c, s, pts);
+        }
+        if (_surfaceUI != null)
+        {
+            _surfaceUI.Initialize(_displayRT_UI);
+            _surfaceUI.IsAuthoritative = false;
+            _surfaceUI.OnUserDraw += (c, s, pts) => SendDrawingCmd(1, c, s, pts);
         }
     }
 
     public void Connect()
     {
         Disconnect();
-        _skippedFrames = 0;
-        _lastBatchSize = 0;
-        _texWidth = SceneConfig.TextureSize;
-        _texHeight = SceneConfig.TextureSize;
-        _initialized = true;
+        _initialized3D = false;
+        _initializedUI = false;
         _downRecvBandwidth.Reset();
         _downProcBandwidth.Reset();
 
-        _kApplyFull = _tileApplyShader.FindKernel("KApplyFull");
-        _kApplyDelta = _tileApplyShader.FindKernel("KApplyDelta");
-
-        int maxMsgSize = 256 * 1024;
-        _client = new Telepathy.Client(maxMsgSize);
-        _client.OnConnected = () => _connected = true;
-        _client.OnData = (data) =>
+        _client = new Telepathy.Client(256 * 1024);
+        _client.OnConnected = () =>
         {
-            byte[] copy = new byte[data.Count];
-            Buffer.BlockCopy(data.Array, data.Offset, copy, 0, data.Count);
-            _batch.Add(new FrameEntry { data = copy, recvTimestamp = Stopwatch.GetTimestamp() });
-            _downRecvBandwidth.Add(data.Count);
+            _connected = true;
+            _client.Send(new ArraySegment<byte>(Protocol.ClientHelloMsg(Protocol.RoleUC)));
         };
+        _client.OnData = OnData;
         _client.OnDisconnected = () => _connected = false;
-        _client.Connect(SceneConfig.HostIP, SceneConfig.Port);
+        _client.Connect(SceneConfig.ServerIP, SceneConfig.Port);
     }
 
     public void Disconnect()
     {
         _connected = false;
-        _initialized = false;
+        _inRoom = false;
         _client?.Disconnect();
-        _batch.Clear();
-        ReleasePayloadBuffer();
+        _batch3D.Clear();
+        _batchUI.Clear();
+    }
+
+    public void JoinRoom(int roomId)
+    {
+        if (!_connected) return;
+        _client.Send(new ArraySegment<byte>(Protocol.JoinRoomMsg(roomId)));
+    }
+
+    public void LeaveRoom()
+    {
+        if (!_inRoom) return;
+        _client.Send(new ArraySegment<byte>(Protocol.LeaveRoomMsg()));
+        _inRoom = false;
+        _batch3D.Clear();
+        _batchUI.Clear();
+        OnRoomLeft?.Invoke();
+    }
+
+    public void SendDrawingCmd(byte canvasId, Color32 color, float size, Vector2[] points)
+    {
+        if (!_connected || !_inRoom) return;
+
+        float[] flatPts = new float[points.Length * 2];
+        for (int i = 0; i < points.Length; i++)
+        {
+            flatPts[i * 2] = points[i].x;
+            flatPts[i * 2 + 1] = points[i].y;
+        }
+
+        byte[] msg = Protocol.DrawingCmdMsg(canvasId, _myClientId,
+            color.r, color.g, color.b, color.a, size, flatPts);
+        _client.Send(new ArraySegment<byte>(msg));
+    }
+
+    void OnData(ArraySegment<byte> data)
+    {
+        byte type = Protocol.GetMessageType(data);
+        switch (type)
+        {
+            case Protocol.ClientId:
+                _myClientId = BitConverter.ToInt32(data.Array, data.Offset + 1);
+                _client.Send(new ArraySegment<byte>(Protocol.RequestRoomListMsg()));
+                break;
+
+            case Protocol.RoomList:
+            {
+                List<RoomInfo> rooms = new List<RoomInfo>();
+                Protocol.ReadRoomList(data, rooms);
+                OnRoomListReceived?.Invoke(rooms);
+                break;
+            }
+
+            case Protocol.JoinAccepted:
+                _inRoom = true;
+                _myRoomId = BitConverter.ToInt32(data.Array, data.Offset + 1);
+                _initialized3D = false;
+                _initializedUI = false;
+                _batch3D.Clear();
+                _batchUI.Clear();
+                OnRoomJoined?.Invoke();
+                break;
+
+            case Protocol.RoomUsersChanged:
+                break;
+
+            case Protocol.CanvasDirty:
+            case Protocol.CanvasKey:
+            {
+                Protocol.ReadCanvasFrame(data, out byte cid, out byte[] framePkt);
+                if (cid == 0) _batch3D.Add(framePkt);
+                else _batchUI.Add(framePkt);
+                _downRecvBandwidth.Add(data.Count);
+                break;
+            }
+        }
     }
 
     void Update()
     {
         _client?.Tick(100);
-
         _downRecvBandwidth.Sample();
         _downProcBandwidth.Sample();
 
-        if (_batch.Count == 0) return;
+        ProcessBatch(_batch3D, _displayRT_3D, _payloadBuffer_3D, ref _initialized3D);
+        ProcessBatch(_batchUI, _displayRT_UI, _payloadBuffer_UI, ref _initializedUI);
+    }
 
-        _lastBatchSize = _batch.Count;
+    void ProcessBatch(List<byte[]> batch, RenderTexture rt, ComputeBuffer payloadBuf, ref bool initialized)
+    {
+        if (batch.Count == 0) return;
 
         int startIdx = 0;
-        for (int i = _batch.Count - 1; i >= 0; i--)
+        for (int i = batch.Count - 1; i >= 0; i--)
         {
-            if (FrameCodec.GetFrameType(_batch[i].data) == FrameType.KeyFrame)
+            if (FrameCodec.GetFrameType(batch[i]) == FrameType.KeyFrame)
             {
                 startIdx = i;
                 break;
             }
         }
-        _skippedFrames += startIdx;
 
-        int dirtyReceived = 0;
-        List<int> collectedIndices = new List<int>();
-        bool gotKeyFrame = false;
-
-        for (int i = startIdx; i < _batch.Count; i++)
+        for (int i = startIdx; i < batch.Count; i++)
         {
-            byte[] pkt = _batch[i].data;
-            long recvTs = _batch[i].recvTimestamp;
+            byte[] pkt = batch[i];
 
             if (FrameCodec.IsCompressed(pkt))
                 pkt = UncompressPacket(pkt);
 
-            ApplyPacket(pkt);
-            FrameType ft = FrameCodec.GetFrameType(pkt);
-            if (ft == FrameType.KeyFrame)
-            {
-                gotKeyFrame = true;
-            }
-            else if (ft == FrameType.DeltaFrame)
-            {
-                ushort tc = BitConverter.ToUInt16(pkt, 1);
-                dirtyReceived += tc;
-                int pos = FrameCodec.HeaderSize;
-                int tileBytes = SceneConfig.TileSize * SceneConfig.TileSize * 4;
-                for (int j = 0; j < tc; j++)
-                {
-                    collectedIndices.Add(BitConverter.ToInt32(pkt, pos));
-                    pos += 4 + tileBytes;
-                }
-            }
-
-            long sendTicks = FrameCodec.GetTimestamp(pkt);
-            _netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
-            _localLagMs = (Stopwatch.GetTimestamp() - recvTs) * 1000f / Stopwatch.Frequency;
-            _lastRecvWatchTimestamp = Stopwatch.GetTimestamp();
-        }
-        DirtyTilesReceived = dirtyReceived;
-
-        if (gotKeyFrame)
-            OnDirtyTilesApplied?.Invoke(null);
-        else if (collectedIndices.Count > 0)
-        {
-            int[] arr = new int[collectedIndices.Count];
-            collectedIndices.CopyTo(arr);
-            OnDirtyTilesApplied?.Invoke(arr);
+            ApplyPacket(pkt, rt, ref payloadBuf, ref initialized);
         }
 
-        _batch.Clear();
+        batch.Clear();
     }
 
-    void ApplyPacket(byte[] packet)
+    void ApplyPacket(byte[] packet, RenderTexture rt, ref ComputeBuffer payloadBuf, ref bool initialized)
     {
         _downProcBandwidth.Add(packet.Length);
 
         FrameType type = FrameCodec.GetFrameType(packet);
-        TryApplyGpu(packet, type);
+
+        if (type == FrameType.KeyFrame)
+        {
+            int width = BitConverter.ToInt32(packet, FrameCodec.HeaderSize);
+            int height = BitConverter.ToInt32(packet, FrameCodec.HeaderSize + 4);
+
+            if (width != rt.width || height != rt.height)
+            {
+                ReleasePayloadBuffer(ref payloadBuf);
+                return;
+            }
+
+            EnsurePayloadBuffer(ref payloadBuf, width, height);
+            int pixelBytes = width * height * 4;
+            payloadBuf.SetData(packet, FrameCodec.HeaderSize + 8, 0, pixelBytes);
+
+            SetGpuParams(width, height);
+            _tileApplyShader.SetBuffer(_kApplyFull, "_Payload", payloadBuf);
+            _tileApplyShader.SetTexture(_kApplyFull, "_OutRT", rt);
+            _tileApplyShader.Dispatch(_kApplyFull,
+                Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
+
+            _texWidth = width;
+            _texHeight = height;
+            initialized = true;
+        }
+        else if (type == FrameType.DeltaFrame)
+        {
+            if (!initialized) return;
+
+            int tileCount = BitConverter.ToUInt16(packet, 1);
+            if (tileCount == 0) return;
+
+            int payloadLen = packet.Length - FrameCodec.HeaderSize;
+            EnsurePayloadBuffer(ref payloadBuf, _texWidth, _texHeight);
+            if (payloadLen > payloadBuf.count * 4) return;
+
+            payloadBuf.SetData(packet, FrameCodec.HeaderSize, 0, payloadLen);
+
+            SetGpuParams(_texWidth, _texHeight);
+            _tileApplyShader.SetBuffer(_kApplyDelta, "_Payload", payloadBuf);
+            _tileApplyShader.SetTexture(_kApplyDelta, "_OutRT", rt);
+            _tileApplyShader.Dispatch(_kApplyDelta, tileCount, 1, 1);
+        }
     }
 
     byte[] UncompressPacket(byte[] packet)
@@ -187,64 +282,6 @@ public class StreamClient : MonoBehaviour
         return newPacket;
     }
 
-    bool TryApplyGpu(byte[] packet, FrameType type)
-    {
-        RenderTexture rt = SceneConfig.DisplayRT;
-        if (rt == null || !rt.enableRandomWrite)
-        {
-            ReleasePayloadBuffer();
-            return false;
-        }
-
-        if (type == FrameType.KeyFrame)
-        {
-            int width = BitConverter.ToInt32(packet, FrameCodec.HeaderSize);
-            int height = BitConverter.ToInt32(packet, FrameCodec.HeaderSize + 4);
-
-            if (width != rt.width || height != rt.height)
-            {
-                ReleasePayloadBuffer();
-                return false;
-            }
-
-            EnsurePayloadBuffer(width, height);
-            int pixelBytes = width * height * 4;
-            _payloadBuffer.SetData(packet, FrameCodec.HeaderSize + 8, 0, pixelBytes);
-
-            SetGpuParams(width, height);
-            _tileApplyShader.SetBuffer(_kApplyFull, "_Payload", _payloadBuffer);
-            _tileApplyShader.SetTexture(_kApplyFull, "_OutRT", rt);
-            _tileApplyShader.Dispatch(_kApplyFull, Mathf.CeilToInt(width / 8f), Mathf.CeilToInt(height / 8f), 1);
-
-            _texWidth = width;
-            _texHeight = height;
-            _initialized = true;
-            return true;
-        }
-
-        if (type == FrameType.DeltaFrame)
-        {
-            if (!_initialized) return true;
-
-            int tileCount = BitConverter.ToUInt16(packet, 1);
-            if (tileCount == 0) return true;
-
-            int payloadLen = packet.Length - FrameCodec.HeaderSize;
-            EnsurePayloadBuffer(_texWidth, _texHeight);
-            if (payloadLen > _payloadBuffer.count * 4) return true;
-
-            _payloadBuffer.SetData(packet, FrameCodec.HeaderSize, 0, payloadLen);
-
-            SetGpuParams(_texWidth, _texHeight);
-            _tileApplyShader.SetBuffer(_kApplyDelta, "_Payload", _payloadBuffer);
-            _tileApplyShader.SetTexture(_kApplyDelta, "_OutRT", rt);
-            _tileApplyShader.Dispatch(_kApplyDelta, tileCount, 1, 1);
-            return true;
-        }
-
-        return false;
-    }
-
     void SetGpuParams(int width, int height)
     {
         int tileSize = SceneConfig.TileSize;
@@ -257,7 +294,7 @@ public class StreamClient : MonoBehaviour
         _tileApplyShader.SetInt("_FlipY", 0);
     }
 
-    void EnsurePayloadBuffer(int width, int height)
+    void EnsurePayloadBuffer(ref ComputeBuffer buf, int width, int height)
     {
         int tileSize = SceneConfig.TileSize;
         if (tileSize > width) tileSize = width;
@@ -265,21 +302,32 @@ public class StreamClient : MonoBehaviour
         int tileCount = (width / tileSize) * (height / tileSize);
         int capBytes = tileCount * (4 + tileBytes);
 
-        if (_payloadBuffer != null && _payloadBuffer.count * 4 >= capBytes) return;
+        if (buf != null && buf.count * 4 >= capBytes) return;
 
-        ReleasePayloadBuffer();
-        _payloadBuffer = new ComputeBuffer(capBytes / 4, 4, ComputeBufferType.Raw);
+        ReleasePayloadBuffer(ref buf);
+        buf = new ComputeBuffer(capBytes / 4, 4, ComputeBufferType.Raw);
     }
 
-    void ReleasePayloadBuffer()
+    void ReleasePayloadBuffer(ref ComputeBuffer buf)
     {
-        _payloadBuffer?.Release();
-        _payloadBuffer = null;
+        buf?.Release();
+        buf = null;
+    }
+
+    RenderTexture CreateDisplayRT(int size)
+    {
+        return new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32)
+        {
+            enableRandomWrite = true
+        };
     }
 
     void OnDestroy()
     {
         Disconnect();
-        ReleasePayloadBuffer();
+        ReleasePayloadBuffer(ref _payloadBuffer_3D);
+        ReleasePayloadBuffer(ref _payloadBuffer_UI);
+        if (_displayRT_3D != null) _displayRT_3D.Release();
+        if (_displayRT_UI != null) _displayRT_UI.Release();
     }
 }
