@@ -1,7 +1,4 @@
 using System.Collections.Generic;
-using System.Net;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -202,53 +199,12 @@ public class SceneLoader : MonoBehaviour
     {
         if (_ipDropdown == null) return;
 
-        List<string> localIPs = GetLocalIPs();
+        List<string> localIPs = NetworkDiscovery.GetLocalIPs();
         _ipDropdown.options.Clear();
         foreach (string ip in localIPs)
             _ipDropdown.options.Add(new Dropdown.OptionData(ip));
 
         if (localIPs.Count > 0)
             _ipDropdown.value = localIPs[0] == "127.0.0.1" && localIPs.Count > 1 ? 1 : 0;
-    }
-
-    List<string> GetLocalIPs()
-    {
-        List<string> ips = new List<string>();
-        ips.Add("127.0.0.1");
-
-        try
-        {
-            foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
-            {
-                if (ni.OperationalStatus != OperationalStatus.Up) continue;
-
-                foreach (UnicastIPAddressInformation addr in ni.GetIPProperties().UnicastAddresses)
-                {
-                    if (addr.Address.AddressFamily == AddressFamily.InterNetwork)
-                    {
-                        string ip = addr.Address.ToString();
-                        if (!ips.Contains(ip))
-                            ips.Add(ip);
-                    }
-                }
-            }
-
-            if (ips.Count == 1)
-            {
-                IPHostEntry hostEntry = Dns.GetHostEntry(Dns.GetHostName());
-                foreach (IPAddress ipAddr in hostEntry.AddressList)
-                {
-                    if (ipAddr.AddressFamily == AddressFamily.InterNetwork)
-                    {
-                        string ip = ipAddr.ToString();
-                        if (!ips.Contains(ip))
-                            ips.Add(ip);
-                    }
-                }
-            }
-        }
-        catch { }
-
-        return ips;
     }
 }

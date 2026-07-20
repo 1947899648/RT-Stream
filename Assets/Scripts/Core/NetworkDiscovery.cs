@@ -115,7 +115,7 @@ public class NetworkDiscovery : MonoBehaviour
         return localIPs.Contains(ip);
     }
 
-    List<string> GetLocalIPs()
+    public static List<string> GetLocalIPs()
     {
         List<string> ips = new List<string>();
         ips.Add("127.0.0.1");
