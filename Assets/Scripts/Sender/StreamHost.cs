@@ -17,6 +17,7 @@ public class StreamHost : MonoBehaviour
     private Thread _acceptThread;
     private volatile bool _running;
     private int _texWidth, _texHeight;
+    private const int MaxMsgSize = 256 * 1024;
 
     public int ClientCount
     {
@@ -61,14 +62,10 @@ public class StreamHost : MonoBehaviour
             get { lock (_lock) return _queue.Count; }
         }
 
-        public void Enqueue(byte[] packet, bool isKeyFrame)
+        public void Enqueue(byte[] packet)
         {
             lock (_lock)
             {
-                if (isKeyFrame)
-                {
-                    _queue.Clear();
-                }
                 _queue.Enqueue(packet);
                 Monitor.Pulse(_lock);
             }
@@ -173,14 +170,7 @@ public class StreamHost : MonoBehaviour
             {
                 int rawBytes = 8 + fullFrame.Length;
                 _rawDirtyBandwidth.Add(rawBytes);
-                byte[] keyPacket = FrameCodec.EncodeKeyFrame(_texWidth, _texHeight, fullFrame);
-                _upEncBandwidth.Add(keyPacket.Length);
-                foreach (ClientConnection c in _clients)
-                {
-                    if (!c.Alive) continue;
-                    c.NeedKeyFrame = false;
-                    c.Enqueue(keyPacket, true);
-                }
+                SendTiledKeyFrame(fullFrame);
             }
             else if (dirtyTiles != null && dirtyTiles.Count > 0)
             {
@@ -192,7 +182,7 @@ public class StreamHost : MonoBehaviour
                 foreach (ClientConnection c in _clients)
                 {
                     if (!c.Alive) continue;
-                    c.Enqueue(deltaPacket, false);
+                    c.Enqueue(deltaPacket);
                 }
             }
         }
@@ -200,6 +190,47 @@ public class StreamHost : MonoBehaviour
         _rawDirtyBandwidth.Sample();
         _upEncBandwidth.Sample();
         _upSendBandwidth.Sample();
+    }
+
+    void SendTiledKeyFrame(byte[] fullFrame)
+    {
+        int tileSize = SceneConfig.TileSize;
+        int tilesX = _texWidth / tileSize;
+        int tilesY = _texHeight / tileSize;
+        int tileBytes = tileSize * tileSize * 4;
+        int tileRowBytes = tileSize * 4;
+        int totalTiles = tilesX * tilesY;
+
+        int maxPerBatch = (MaxMsgSize - FrameCodec.HeaderSize) / (4 + tileBytes);
+        if (maxPerBatch < 1) maxPerBatch = 1;
+
+        List<DirtyTile> batch = new List<DirtyTile>(maxPerBatch);
+
+        for (int tileIndex = 0; tileIndex < totalTiles; tileIndex++)
+        {
+            int tx = tileIndex % tilesX;
+            int ty = tileIndex / tilesX;
+            byte[] tileData = new byte[tileBytes];
+            for (int row = 0; row < tileSize; row++)
+            {
+                int srcOff = ((ty * tileSize + row) * _texWidth + tx * tileSize) * 4;
+                Buffer.BlockCopy(fullFrame, srcOff, tileData, row * tileRowBytes, tileRowBytes);
+            }
+            batch.Add(new DirtyTile { index = tileIndex, data = tileData });
+
+            if (batch.Count >= maxPerBatch || tileIndex == totalTiles - 1)
+            {
+                byte[] packet = FrameCodec.EncodeDeltaFrame(batch);
+                _upEncBandwidth.Add(packet.Length);
+                foreach (ClientConnection c in _clients)
+                {
+                    if (!c.Alive) continue;
+                    c.NeedKeyFrame = false;
+                    c.Enqueue(packet);
+                }
+                batch.Clear();
+            }
+        }
     }
 
     void CleanupDeadClients()

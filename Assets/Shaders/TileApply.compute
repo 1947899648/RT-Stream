@@ -1,4 +1,3 @@
-#pragma kernel KApplyFull
 #pragma kernel KApplyDelta
 
 RWTexture2D<float4> _OutRT;
@@ -21,14 +20,6 @@ uint2 FlipCoord(uint2 xy)
 {
     if (_FlipY != 0) xy.y = (uint)_TexHeight - 1 - xy.y;
     return xy;
-}
-
-[numthreads(THREADS, THREADS, 1)]
-void KApplyFull(uint3 id : SV_DispatchThreadID)
-{
-    if (id.x >= (uint)_TexWidth || id.y >= (uint)_TexHeight) return;
-    uint pixel = _Payload.Load(4 * (id.y * _TexWidth + id.x));
-    _OutRT[FlipCoord(id.xy)] = UnpackPixel(pixel);
 }
 
 [numthreads(THREADS, THREADS, 1)]

@@ -310,7 +310,7 @@ public class DiagnosticPanel : MonoBehaviour
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Frame Batch Size: {_client.LastBatchSize}    Skipped Frames: {_client.SkippedFrames}", _styleText);
+            $"Frame Batch Size: {_client.LastBatchSize}", _styleText);
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
