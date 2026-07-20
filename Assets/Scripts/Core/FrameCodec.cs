@@ -17,6 +17,7 @@ public enum FrameType : byte
 
 public static class FrameCodec
 {
+    public const int TileSize = 64;
     public const int HeaderSize = 15;
     public const int TilePayloadOffset = 16;
     private const ushort CompressFlag = 0x8000;
@@ -28,7 +29,7 @@ public static class FrameCodec
 
     public static int GetBytesPerTile()
     {
-        int tileSize = SceneConfig.TileSize;
+        int tileSize = TileSize;
         return tileSize * tileSize * 4;
     }
 

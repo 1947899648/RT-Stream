@@ -125,7 +125,7 @@ public class DiagnosticPanel : MonoBehaviour
 
         if (_host != null && _host.DiagTextureCount > 0)
             h += _lineH * 2 + 4;
-        else if (_client != null && SceneConfig.DisplayRT != null)
+        else if (_client != null && _client.TryGetDiagTextureInfo(out int _, out int _))
             h += _lineH + 4;
         h += 6;
 
@@ -214,22 +214,22 @@ public class DiagnosticPanel : MonoBehaviour
         if (_host != null && _host.TryGetDiagTextureInfo(out int tw, out int th))
         {
             int rtMem = tw * th * 4;
-            int tx = tw / SceneConfig.TileSize;
-            int ty = th / SceneConfig.TileSize;
+            int tx = tw / FrameCodec.TileSize;
+            int ty = th / FrameCodec.TileSize;
 
             GUI.Label(new Rect(x, y, _panelWidth, 22),
                 $"Render Textures: {_host.DiagTextureCount}  [{tw}×{th}]  {rtMem / 1024f / 1024f:F1} MB", _styleText);
             y += _lineH;
 
             GUI.Label(new Rect(x, y, _panelWidth, 22),
-                $"Tile Grid: {tx}×{ty} ({tx * ty} tiles)  {SceneConfig.TileSize} px", _styleText);
+                $"Tile Grid: {tx}×{ty} ({tx * ty} tiles)  {FrameCodec.TileSize} px", _styleText);
             y += _lineH + 4;
         }
-        else if (_client != null && SceneConfig.DisplayRT != null)
+        else if (_client != null && _client.TryGetDiagTextureInfo(out int rw, out int rh))
         {
-            int rtMem = SceneConfig.DisplayRT.width * SceneConfig.DisplayRT.height * 4;
+            int rtMem = rw * rh * 4;
             GUI.Label(new Rect(x, y, _panelWidth, 22),
-                $"Render Texture: {SceneConfig.DisplayRT.width}×{SceneConfig.DisplayRT.height}  {SceneConfig.DisplayRT.format}  {rtMem / 1024f / 1024f:F1} MB", _styleText);
+                $"Render Texture: {rw}×{rh}  {rtMem / 1024f / 1024f:F1} MB", _styleText);
             y += _lineH + 4;
         }
 
@@ -263,7 +263,7 @@ public class DiagnosticPanel : MonoBehaviour
         _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Connected Clients: {_host.ClientCount}    Listen Port: {SceneConfig.Port}", _styleText);
+            $"Connected Clients: {_host.ClientCount}    Listen Port: {_host.ListenPort}", _styleText);
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
@@ -306,7 +306,7 @@ public class DiagnosticPanel : MonoBehaviour
 
         _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
         GUI.Label(new Rect(x, y, _panelWidth, 22),
-            $"Connection: {SceneConfig.HostIP}:{SceneConfig.Port}", _styleText);
+            $"Connection: {_client.RemoteHost}:{_client.RemotePort}", _styleText);
         y += _lineH;
 
         GUI.Label(new Rect(x, y, _panelWidth, 22),
@@ -459,15 +459,12 @@ public class DiagnosticPanel : MonoBehaviour
 
     void EnsureGridTexture()
     {
-        int tileSize = SceneConfig.TileSize;
+        int tileSize = FrameCodec.TileSize;
         int texW = 0, texH = 0;
         if (_host != null)
             _host.TryGetDiagTextureInfo(out texW, out texH);
-        else if (_client != null && SceneConfig.DisplayRT != null)
-        {
-            texW = SceneConfig.DisplayRT.width;
-            texH = SceneConfig.DisplayRT.height;
-        }
+        else if (_client != null)
+            _client.TryGetDiagTextureInfo(out texW, out texH);
 
         if (texW <= 0) return;
         int expectedTilesX = texW / tileSize;
@@ -482,15 +479,12 @@ public class DiagnosticPanel : MonoBehaviour
         if (_gridTex != null) { Destroy(_gridTex); _gridTex = null; }
         _dirtyTimestamps.Clear();
 
-        int tileSize = SceneConfig.TileSize;
+        int tileSize = FrameCodec.TileSize;
         int texW = 0, texH = 0;
         if (_host != null)
             _host.TryGetDiagTextureInfo(out texW, out texH);
-        else if (_client != null && SceneConfig.DisplayRT != null)
-        {
-            texW = SceneConfig.DisplayRT.width;
-            texH = SceneConfig.DisplayRT.height;
-        }
+        else if (_client != null)
+            _client.TryGetDiagTextureInfo(out texW, out texH);
 
         if (texW <= 0) return;
         _tilesX = texW / tileSize;

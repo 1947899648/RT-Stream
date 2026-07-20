@@ -73,8 +73,8 @@ public class ReceiverSetup : MonoBehaviour
 
         _streamClient.OnTextureAnnounce += OnTextureAnnounce;
 
-        _ipInput = SceneConfig.HostIP;
-        _portInput = SceneConfig.Port.ToString();
+        _ipInput = "127.0.0.1";
+        _portInput = "7777";
 
         if (_startLocal)
             SwitchToLocal();
@@ -159,13 +159,10 @@ public class ReceiverSetup : MonoBehaviour
 
     void ConnectToRemote()
     {
-        if (int.TryParse(_portInput, out int port) && port > 0 && port < 65536)
-            SceneConfig.Port = port;
+        if (!int.TryParse(_portInput, out int port) || port <= 0 || port >= 65536) return;
+        if (string.IsNullOrEmpty(_ipInput)) return;
 
-        if (!string.IsNullOrEmpty(_ipInput))
-            SceneConfig.HostIP = _ipInput;
-
-        _streamClient.Connect(_texIds.ToArray());
+        _streamClient.Connect(_ipInput, port, _texIds.ToArray());
     }
 
     void CreateLocalOutputRTs()
@@ -370,7 +367,7 @@ public class ReceiverSetup : MonoBehaviour
         if (_isLocal)
             status = "模式: 本地模拟";
         else if (_streamClient.IsConnected)
-            status = string.Format("已连接 {0}:{1}", SceneConfig.HostIP, SceneConfig.Port);
+            status = string.Format("已连接 {0}:{1}", _streamClient.RemoteHost, _streamClient.RemotePort);
         else
             status = "未连接";
 

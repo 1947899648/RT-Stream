@@ -209,12 +209,13 @@ public class StreamHost : MonoBehaviour
     }
 
     public bool IsRunning => _running;
+    public int ListenPort { get; private set; }
 
     public void StartHost(int port)
     {
         StopHost();
 
-        SceneConfig.Port = port;
+        ListenPort = port;
         _listener = new TcpListener(IPAddress.Any, port);
         _listener.Start();
         _running = true;
@@ -331,7 +332,7 @@ public class StreamHost : MonoBehaviour
 
     void SendTiledKeyFrame(byte texId, ushort texWidth, ushort texHeight, byte[] fullFrame)
     {
-        int tileSize = SceneConfig.TileSize;
+        int tileSize = FrameCodec.TileSize;
         int tilesX = texWidth / tileSize;
         int tilesY = texHeight / tileSize;
         int tileBytes = tileSize * tileSize * 4;

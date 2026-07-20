@@ -55,7 +55,7 @@ public class SenderSetup : MonoBehaviour
         }
 
         _ipInput = "0.0.0.0";
-        _portInput = SceneConfig.Port.ToString();
+        _portInput = "7777";
 
         for (int i = 0; i < _drawController.EntryCount; i++)
         {
@@ -133,7 +133,7 @@ public class SenderSetup : MonoBehaviour
                 if (int.TryParse(_portInput, out int port) && port > 0 && port < 65536)
                     _streamHost.StartHost(port);
                 else
-                    _portInput = SceneConfig.Port.ToString();
+                    _portInput = _streamHost.ListenPort.ToString();
             }
         }
 

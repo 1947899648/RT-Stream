@@ -45,7 +45,7 @@ public class GpuTileDiffer
         _cs = shader;
         _texWidth = rt.width;
         _texHeight = rt.height;
-        _tileSize = SceneConfig.TileSize;
+        _tileSize = FrameCodec.TileSize;
         if (_tileSize > _texWidth) _tileSize = _texWidth;
         TilesX = _texWidth / _tileSize;
         TilesY = _texHeight / _tileSize;

@@ -56,6 +56,21 @@ public class StreamClient : MonoBehaviour
     public int DirtyTilesReceived { get; private set; }
     public float NetLagMs => _netLagMs;
     public float LocalLagMs => _localLagMs;
+    public string RemoteHost { get; private set; }
+    public int RemotePort { get; private set; }
+
+    public bool TryGetDiagTextureInfo(out int width, out int height)
+    {
+        foreach (TextureMeta meta in _meta.Values)
+        {
+            width = meta.Width;
+            height = meta.Height;
+            return true;
+        }
+        width = 0;
+        height = 0;
+        return false;
+    }
     public float SilenceMs
     {
         get
@@ -65,7 +80,7 @@ public class StreamClient : MonoBehaviour
         }
     }
 
-    public void Connect(byte[] subscribedTexIds = null)
+    public void Connect(string host, int port, byte[] subscribedTexIds = null)
     {
         Disconnect();
         _lastBatchSize = 0;
@@ -74,12 +89,15 @@ public class StreamClient : MonoBehaviour
         _meta.Clear();
         _subscribedTexIds = subscribedTexIds;
 
+        RemoteHost = host;
+        RemotePort = port;
+
         _kApplyDelta = _tileApplyShader.FindKernel("KApplyDelta");
 
         try
         {
             _tcpClient = new TcpClient();
-            _tcpClient.Connect(SceneConfig.HostIP, SceneConfig.Port);
+            _tcpClient.Connect(host, port);
             _stream = _tcpClient.GetStream();
 
             byte[] handshake = FrameCodec.EncodeSubscribeReq(_subscribedTexIds);
@@ -259,11 +277,10 @@ public class StreamClient : MonoBehaviour
         if (!_meta.TryGetValue(texId, out TextureMeta meta))
             return true;
 
-        RenderTexture rt = null;
-        if (!_outputTextures.TryGetValue(texId, out rt) || rt == null)
-            rt = SceneConfig.DisplayRT;
+        if (!_outputTextures.TryGetValue(texId, out RenderTexture rt) || rt == null)
+            return false;
 
-        if (rt == null || !rt.enableRandomWrite)
+        if (!rt.enableRandomWrite)
         {
             ReleasePayloadBuffer();
             return false;
@@ -287,7 +304,7 @@ public class StreamClient : MonoBehaviour
 
     void SetGpuParams(int width, int height)
     {
-        int tileSize = SceneConfig.TileSize;
+        int tileSize = FrameCodec.TileSize;
         if (tileSize > width) tileSize = width;
 
         _tileApplyShader.SetInt("_TexWidth", width);
@@ -299,7 +316,7 @@ public class StreamClient : MonoBehaviour
 
     void EnsurePayloadBuffer(int width, int height)
     {
-        int tileSize = SceneConfig.TileSize;
+        int tileSize = FrameCodec.TileSize;
         if (tileSize > width) tileSize = width;
         int tileBytes = tileSize * tileSize * 4;
         int tileCount = (width / tileSize) * (height / tileSize);
