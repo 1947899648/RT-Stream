@@ -118,8 +118,8 @@ public class StreamHost : MonoBehaviour
     void Start()
     {
         DrawingCanvas canvas = FindObjectOfType<DrawingCanvas>();
-        _texWidth = SceneConfig.TextureSize;
-        _texHeight = SceneConfig.TextureSize;
+        _texWidth = SceneConfig.TextureWidth;
+        _texHeight = SceneConfig.TextureHeight;
 
         _tileSource = new GpuTileDiffer(canvas.CanvasTexture, _tileDiffShader);
 

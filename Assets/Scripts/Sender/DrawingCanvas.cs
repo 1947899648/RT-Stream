@@ -37,15 +37,18 @@ public class DrawingCanvas : MonoBehaviour
 
     void Start()
     {
-        int size = SceneConfig.TextureSize;
-        if (size < 64) size = 64;
-        if (size > 8192) size = 8192;
+        int w = SceneConfig.TextureWidth;
+        int h = SceneConfig.TextureHeight;
+        if (w < 64) w = 64;
+        if (w > 8192) w = 8192;
+        if (h < 64) h = 64;
+        if (h > 8192) h = 8192;
 
-        _canvasRT = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32)
+        _canvasRT = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32)
         {
             filterMode = FilterMode.Bilinear
         };
-        _tempRT = new RenderTexture(size, size, 0, RenderTextureFormat.ARGB32)
+        _tempRT = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32)
         {
             filterMode = FilterMode.Bilinear
         };

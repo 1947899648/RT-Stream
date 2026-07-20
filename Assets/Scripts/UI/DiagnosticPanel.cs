@@ -24,6 +24,7 @@ public class DiagnosticPanel : MonoBehaviour
     private Texture2D _gridTex;
     private Texture2D _whiteTex;
     private int _tilesX, _tilesY;
+    private int _mapHeight;
     private float _tilePixelF;
 
     private GUIStyle _styleFPS;
@@ -158,7 +159,7 @@ public class DiagnosticPanel : MonoBehaviour
         if (_host != null || _client != null)
         {
             h += 8 + 26;
-            h += _mapWidth + 12;
+            h += _mapHeight + 12;
         }
 
         h += 8;
@@ -212,17 +213,19 @@ public class DiagnosticPanel : MonoBehaviour
 
         if (_canvas != null)
         {
-            int size = SceneConfig.TextureSize;
-            int rtMem = size * size * 4;
-            int t = size / SceneConfig.TileSize;
+            int w = SceneConfig.TextureWidth;
+            int h = SceneConfig.TextureHeight;
+            int rtMem = w * h * 4;
+            int tx = w / SceneConfig.TileSize;
+            int ty = h / SceneConfig.TileSize;
             string fmt = _canvas.CanvasTexture != null ? _canvas.CanvasTexture.format.ToString() : "RGBA32";
 
             GUI.Label(new Rect(x, y, _panelWidth, 22),
-                $"Render Texture: {size}×{size}  {fmt}  {rtMem / 1024f / 1024f:F1} MB", _styleText);
+                $"Render Texture: {w}×{h}  {fmt}  {rtMem / 1024f / 1024f:F1} MB", _styleText);
             y += _lineH;
 
             GUI.Label(new Rect(x, y, _panelWidth, 22),
-                $"Tile Grid: {t}×{t} ({t * t} tiles)  {SceneConfig.TileSize} px", _styleText);
+                $"Tile Grid: {tx}×{ty} ({tx * ty} tiles)  {SceneConfig.TileSize} px", _styleText);
             y += _lineH + 4;
         }
         else if (_client != null && SceneConfig.DisplayRT != null)
@@ -400,8 +403,8 @@ public class DiagnosticPanel : MonoBehaviour
         int mapX = x;
         int mapY = y;
 
-        Rect mapRect = new Rect(mapX, mapY, _mapWidth, _mapWidth);
-        GUI.DrawTexture(mapRect, _gridTex);
+            Rect mapRect = new Rect(mapX, mapY, _mapWidth, _mapHeight);
+            GUI.DrawTexture(mapRect, _gridTex);
 
         Color prev = GUI.color;
         Color dirtyOrig = _dirtyColor;
@@ -434,7 +437,7 @@ public class DiagnosticPanel : MonoBehaviour
         }
 
         GUI.color = prev;
-        return y + _mapWidth + 12 + 8;
+        return y + _mapHeight + 12 + 8;
     }
 
     void DetectRole()
@@ -460,12 +463,16 @@ public class DiagnosticPanel : MonoBehaviour
     void EnsureGridTexture()
     {
         int tileSize = SceneConfig.TileSize;
-        int textureSize = SceneConfig.TextureSize;
+        int texW = SceneConfig.TextureWidth;
+        int texH = SceneConfig.TextureHeight;
         if (_host == null && _client != null && SceneConfig.DisplayRT != null)
-            textureSize = SceneConfig.DisplayRT.width;
+        {
+            texW = SceneConfig.DisplayRT.width;
+            texH = SceneConfig.DisplayRT.height;
+        }
 
-        if (textureSize <= 0) return;
-        int expectedTilesX = textureSize / tileSize;
+        if (texW <= 0) return;
+        int expectedTilesX = texW / tileSize;
         if (expectedTilesX <= 0) return;
         if (_tilesX == expectedTilesX && _gridTex != null) return;
 
@@ -478,25 +485,30 @@ public class DiagnosticPanel : MonoBehaviour
         _dirtyTimestamps.Clear();
 
         int tileSize = SceneConfig.TileSize;
-        int textureSize = SceneConfig.TextureSize;
+        int texW = SceneConfig.TextureWidth;
+        int texH = SceneConfig.TextureHeight;
         if (_host == null && _client != null && SceneConfig.DisplayRT != null)
-            textureSize = SceneConfig.DisplayRT.width;
+        {
+            texW = SceneConfig.DisplayRT.width;
+            texH = SceneConfig.DisplayRT.height;
+        }
 
-        if (textureSize <= 0) return;
-        _tilesX = textureSize / tileSize;
+        if (texW <= 0) return;
+        _tilesX = texW / tileSize;
+        _tilesY = texH / tileSize;
         if (_tilesX <= 0) return;
-        _tilesY = _tilesX;
         _tilePixelF = (float)_mapWidth / _tilesX;
+        _mapHeight = Mathf.RoundToInt(_tilePixelF * _tilesY);
 
-        _gridTex = new Texture2D(_mapWidth, _mapWidth, TextureFormat.RGBA32, false);
-        Color[] pixels = new Color[_mapWidth * _mapWidth];
+        _gridTex = new Texture2D(_mapWidth, _mapHeight, TextureFormat.RGBA32, false);
+        Color[] pixels = new Color[_mapWidth * _mapHeight];
         Color bgColor = new Color(0.1f, 0.1f, 0.1f, 0.6f);
 
         float gridScale = Mathf.Sqrt(8f / _tilesX);
         Color gridCol = _gridColor;
         gridCol.a *= gridScale;
 
-        for (int y = 0; y < _mapWidth; y++)
+        for (int y = 0; y < _mapHeight; y++)
         {
             for (int x = 0; x < _mapWidth; x++)
             {

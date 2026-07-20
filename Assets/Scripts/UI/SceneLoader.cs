@@ -94,7 +94,10 @@ public class SceneLoader : MonoBehaviour
         {
             string sizeText = _sizeDropdown.options[_sizeDropdown.value].text;
             if (int.TryParse(sizeText, out int s) && s >= 64 && s <= 8192)
-                SceneConfig.TextureSize = s;
+            {
+                SceneConfig.TextureWidth = s;
+                SceneConfig.TextureHeight = s;
+            }
         }
     }
 

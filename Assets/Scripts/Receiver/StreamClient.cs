@@ -73,8 +73,8 @@ public class StreamClient : MonoBehaviour
             _stream = _tcpClient.GetStream();
             _connected = true;
             _running = true;
-            _texWidth = SceneConfig.TextureSize;
-            _texHeight = SceneConfig.TextureSize;
+            _texWidth = SceneConfig.TextureWidth;
+            _texHeight = SceneConfig.TextureHeight;
             _initialized = true;
             _receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
             _receiveThread.Start();
