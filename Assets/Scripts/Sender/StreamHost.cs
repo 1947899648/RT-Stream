@@ -208,13 +208,42 @@ public class StreamHost : MonoBehaviour
         }
     }
 
-    void Start()
+    public bool IsRunning => _running;
+
+    public void StartHost(int port)
     {
-        _listener = new TcpListener(IPAddress.Any, SceneConfig.Port);
+        StopHost();
+
+        SceneConfig.Port = port;
+        _listener = new TcpListener(IPAddress.Any, port);
         _listener.Start();
         _running = true;
         _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
         _acceptThread.Start();
+
+        Debug.Log($"StreamHost: Started on port {port}");
+    }
+
+    public void StopHost()
+    {
+        _running = false;
+        _listener?.Stop();
+        _acceptThread?.Join(1000);
+
+        lock (_clientsLock)
+        {
+            foreach (ClientConnection c in _clients) c.Shutdown();
+            _clients.Clear();
+        }
+
+        _listener = null;
+        _acceptThread = null;
+
+        Debug.Log("StreamHost: Stopped");
+    }
+
+    void Start()
+    {
     }
 
     void Update()

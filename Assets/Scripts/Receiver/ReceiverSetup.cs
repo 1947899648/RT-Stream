@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class ReceiverSetup : MonoBehaviour
@@ -28,8 +29,9 @@ public class ReceiverSetup : MonoBehaviour
 
     #region 面板常量
 
-    private const float _panelW = 240f;
-    private const float _panelMargin = 10f;
+    private const float _panelW = 250f;
+    private const float _panelMarginX = 10f;
+    private const float _panelMarginB = 40f;
     private const float _panelPad = 8f;
     private const float _lineH = 22f;
     private const float _ctrlH = 28f;
@@ -41,6 +43,8 @@ public class ReceiverSetup : MonoBehaviour
     private bool _isLocal;
     private float _localTimer;
     private int _localPatternIndex;
+    private string _ipInput;
+    private string _portInput;
     private Dictionary<byte, RenderTexture> _outputRTs = new Dictionary<byte, RenderTexture>();
     private List<byte> _texIds = new List<byte>();
 
@@ -69,6 +73,9 @@ public class ReceiverSetup : MonoBehaviour
 
         _streamClient.OnTextureAnnounce += OnTextureAnnounce;
 
+        _ipInput = SceneConfig.HostIP;
+        _portInput = SceneConfig.Port.ToString();
+
         if (_startLocal)
             SwitchToLocal();
         else
@@ -86,9 +93,9 @@ public class ReceiverSetup : MonoBehaviour
 
     void OnGUI()
     {
-        float px = Screen.width - _panelW - _panelMargin;
-        float py = _panelMargin;
+        float px = Screen.width - _panelW - _panelMarginX;
         float ph = CalcPanelHeight();
+        float py = Screen.height - ph - _panelMarginB;
         Rect panelRect = new Rect(px, py, _panelW, ph);
 
         GUI.Box(panelRect, "");
@@ -98,9 +105,18 @@ public class ReceiverSetup : MonoBehaviour
 
         y = DrawModeButtons(y);
         y += 6f;
+
+        if (!_isLocal)
+        {
+            y = DrawRemoteConfig(y);
+            y += 6f;
+        }
+
         y = DrawStatus(y);
         y += 4f;
-        DrawTextureInfo(y);
+        y = DrawTextureInfo(y);
+        y += 4f;
+        DrawMenuButton(y);
 
         GUI.EndGroup();
     }
@@ -139,6 +155,15 @@ public class ReceiverSetup : MonoBehaviour
 
         for (int i = 0; i < _texIds.Count; i++)
             CreateOutputRT(_texIds[i], 2, 2);
+    }
+
+    void ConnectToRemote()
+    {
+        if (int.TryParse(_portInput, out int port) && port > 0 && port < 65536)
+            SceneConfig.Port = port;
+
+        if (!string.IsNullOrEmpty(_ipInput))
+            SceneConfig.HostIP = _ipInput;
 
         _streamClient.Connect(_texIds.ToArray());
     }
@@ -262,16 +287,31 @@ public class ReceiverSetup : MonoBehaviour
 
     float CalcPanelHeight()
     {
-        int texLines = _outputRTs.Count > 0 ? _outputRTs.Count : 1;
         float h = _panelPad;
         h += _ctrlH;
         h += 6f;
+
+        if (!_isLocal)
+        {
+            h += _ctrlH;
+            h += 2f;
+            h += _ctrlH;
+            h += 4f;
+            h += _ctrlH;
+            h += 6f;
+        }
+
         h += _lineH;
         if (!_isLocal && _streamClient != null && _streamClient.IsConnected)
             h += _lineH;
         h += 4f;
+
+        int texLines = _outputRTs.Count > 0 ? _outputRTs.Count : 1;
         h += _lineH * texLines;
+        h += 4f;
+        h += _ctrlH;
         h += _panelPad;
+
         return h;
     }
 
@@ -293,6 +333,33 @@ public class ReceiverSetup : MonoBehaviour
         }
 
         GUI.backgroundColor = prev;
+        return y + _ctrlH;
+    }
+
+    float DrawRemoteConfig(float y)
+    {
+        float labelW = 36f;
+        float fieldW = _panelW - _panelPad * 2 - labelW - 4f;
+
+        GUI.Label(new Rect(_panelPad, y, labelW, _lineH), "IP:");
+        _ipInput = GUI.TextField(new Rect(_panelPad + labelW, y, fieldW, _ctrlH), _ipInput);
+        y += _ctrlH + 2f;
+
+        GUI.Label(new Rect(_panelPad, y, labelW, _lineH), "端口:");
+        _portInput = GUI.TextField(new Rect(_panelPad + labelW, y, fieldW, _ctrlH), _portInput);
+        y += _ctrlH + 4f;
+
+        bool isConnected = _streamClient != null && _streamClient.IsConnected;
+        string btnText = isConnected ? "断开" : "连接";
+
+        if (GUI.Button(new Rect(_panelPad, y, _panelW - _panelPad * 2, _ctrlH), btnText))
+        {
+            if (isConnected)
+                _streamClient.Disconnect();
+            else
+                ConnectToRemote();
+        }
+
         return y + _ctrlH;
     }
 
@@ -332,14 +399,20 @@ public class ReceiverSetup : MonoBehaviour
             byte texId = kv.Key;
             int w = kv.Value.width;
             int h = kv.Value.height;
-            string label = _isLocal
-                ? string.Format("texId={0}: {1}\u00d7{2}", texId, w, h)
-                : string.Format("texId={0}: {1}\u00d7{2}", texId, w, h);
+            string label = string.Format("texId={0}: {1}\u00d7{2}", texId, w, h);
             GUI.Label(new Rect(_panelPad, y, _panelW - _panelPad * 2, _lineH), label);
             y += _lineH;
         }
 
         return y;
+    }
+
+    float DrawMenuButton(float y)
+    {
+        if (GUI.Button(new Rect(_panelPad, y, _panelW - _panelPad * 2, _ctrlH), "返回主菜单"))
+            SceneManager.LoadScene("MainScene");
+
+        return y + _ctrlH;
     }
 
     #endregion
