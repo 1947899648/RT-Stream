@@ -123,7 +123,7 @@ public class DiagnosticPanel : MonoBehaviour
 
         h += 8 + 26;
 
-        if (_canvas != null)
+        if (_host != null && _host.DiagTextureCount > 0)
             h += _lineH * 2 + 4;
         else if (_client != null && SceneConfig.DisplayRT != null)
             h += _lineH + 4;
@@ -211,17 +211,14 @@ public class DiagnosticPanel : MonoBehaviour
     {
         _styleText.normal.textColor = new Color(0.8f, 0.8f, 1f);
 
-        if (_canvas != null)
+        if (_host != null && _host.TryGetDiagTextureInfo(out int tw, out int th))
         {
-            int w = SceneConfig.TextureWidth;
-            int h = SceneConfig.TextureHeight;
-            int rtMem = w * h * 4;
-            int tx = w / SceneConfig.TileSize;
-            int ty = h / SceneConfig.TileSize;
-            string fmt = _canvas.CanvasTexture != null ? _canvas.CanvasTexture.format.ToString() : "RGBA32";
+            int rtMem = tw * th * 4;
+            int tx = tw / SceneConfig.TileSize;
+            int ty = th / SceneConfig.TileSize;
 
             GUI.Label(new Rect(x, y, _panelWidth, 22),
-                $"Render Texture: {w}×{h}  {fmt}  {rtMem / 1024f / 1024f:F1} MB", _styleText);
+                $"Render Textures: {_host.DiagTextureCount}  [{tw}×{th}]  {rtMem / 1024f / 1024f:F1} MB", _styleText);
             y += _lineH;
 
             GUI.Label(new Rect(x, y, _panelWidth, 22),
@@ -463,9 +460,10 @@ public class DiagnosticPanel : MonoBehaviour
     void EnsureGridTexture()
     {
         int tileSize = SceneConfig.TileSize;
-        int texW = SceneConfig.TextureWidth;
-        int texH = SceneConfig.TextureHeight;
-        if (_host == null && _client != null && SceneConfig.DisplayRT != null)
+        int texW = 0, texH = 0;
+        if (_host != null)
+            _host.TryGetDiagTextureInfo(out texW, out texH);
+        else if (_client != null && SceneConfig.DisplayRT != null)
         {
             texW = SceneConfig.DisplayRT.width;
             texH = SceneConfig.DisplayRT.height;
@@ -485,9 +483,10 @@ public class DiagnosticPanel : MonoBehaviour
         _dirtyTimestamps.Clear();
 
         int tileSize = SceneConfig.TileSize;
-        int texW = SceneConfig.TextureWidth;
-        int texH = SceneConfig.TextureHeight;
-        if (_host == null && _client != null && SceneConfig.DisplayRT != null)
+        int texW = 0, texH = 0;
+        if (_host != null)
+            _host.TryGetDiagTextureInfo(out texW, out texH);
+        else if (_client != null && SceneConfig.DisplayRT != null)
         {
             texW = SceneConfig.DisplayRT.width;
             texH = SceneConfig.DisplayRT.height;

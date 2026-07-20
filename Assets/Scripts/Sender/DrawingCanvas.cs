@@ -5,6 +5,14 @@ using UnityEngine.Serialization;
 [RequireComponent(typeof(RawImage))]
 public class DrawingCanvas : MonoBehaviour
 {
+    [Header("纹理尺寸")]
+    [SerializeField]
+    [Range(64, 8192)]
+    private int _textureWidth = 512;
+    [SerializeField]
+    [Range(64, 8192)]
+    private int _textureHeight = 512;
+
     [Header("笔刷")]
     public Color brushColor = Color.black;
     [Range(0.001f, 0.1f)]
@@ -33,22 +41,15 @@ public class DrawingCanvas : MonoBehaviour
     {
         _rawImage = GetComponent<RawImage>();
         _rt = GetComponent<RectTransform>();
-    }
 
-    void Start()
-    {
-        int w = SceneConfig.TextureWidth;
-        int h = SceneConfig.TextureHeight;
-        if (w < 64) w = 64;
-        if (w > 8192) w = 8192;
-        if (h < 64) h = 64;
-        if (h > 8192) h = 8192;
+        _textureWidth = Mathf.Clamp(_textureWidth, 64, 8192) / 64 * 64;
+        _textureHeight = Mathf.Clamp(_textureHeight, 64, 8192) / 64 * 64;
 
-        _canvasRT = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32)
+        _canvasRT = new RenderTexture(_textureWidth, _textureHeight, 0, RenderTextureFormat.ARGB32)
         {
             filterMode = FilterMode.Bilinear
         };
-        _tempRT = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32)
+        _tempRT = new RenderTexture(_textureWidth, _textureHeight, 0, RenderTextureFormat.ARGB32)
         {
             filterMode = FilterMode.Bilinear
         };
@@ -56,7 +57,10 @@ public class DrawingCanvas : MonoBehaviour
         ClearCanvas();
         _rawImage.texture = _canvasRT;
         _brushMat = new Material(Shader.Find("Custom/Brush"));
+    }
 
+    void Start()
+    {
         _redBtn.onClick.AddListener(SetRed);
         _greenBtn.onClick.AddListener(SetGreen);
         _blueBtn.onClick.AddListener(SetBlue);

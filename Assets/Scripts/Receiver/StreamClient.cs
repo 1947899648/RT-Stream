@@ -17,6 +17,12 @@ public class StreamClient : MonoBehaviour
         public float netLagMs;
     }
 
+    private struct TextureMeta
+    {
+        public ushort Width;
+        public ushort Height;
+    }
+
     private TcpClient _tcpClient;
     private NetworkStream _stream;
     private Thread _receiveThread;
@@ -24,13 +30,14 @@ public class StreamClient : MonoBehaviour
     private bool _connected;
     private bool _running;
 
-    private bool _initialized;
-    private int _texWidth, _texHeight;
     private List<byte[]> _batch = new List<byte[]>();
     private int _lastBatchSize;
 
     private ComputeBuffer _payloadBuffer;
     private int _kApplyDelta;
+    private Dictionary<byte, TextureMeta> _meta = new Dictionary<byte, TextureMeta>();
+    private Dictionary<byte, RenderTexture> _outputTextures = new Dictionary<byte, RenderTexture>();
+    private byte[] _subscribedTexIds;
 
     private float _netLagMs;
     private float _localLagMs;
@@ -42,6 +49,7 @@ public class StreamClient : MonoBehaviour
     public float DownProcMBps => _downProcBandwidth.MBps;
 
     public event System.Action<int[]> OnDirtyTilesApplied;
+    public event System.Action<byte, int, int> OnTextureAnnounce;
 
     public bool IsConnected => _connected;
     public int LastBatchSize => _lastBatchSize;
@@ -57,12 +65,14 @@ public class StreamClient : MonoBehaviour
         }
     }
 
-    public void Connect()
+    public void Connect(byte[] subscribedTexIds = null)
     {
         Disconnect();
         _lastBatchSize = 0;
         _downRecvBandwidth.Reset();
         _downProcBandwidth.Reset();
+        _meta.Clear();
+        _subscribedTexIds = subscribedTexIds;
 
         _kApplyDelta = _tileApplyShader.FindKernel("KApplyDelta");
 
@@ -71,11 +81,12 @@ public class StreamClient : MonoBehaviour
             _tcpClient = new TcpClient();
             _tcpClient.Connect(SceneConfig.HostIP, SceneConfig.Port);
             _stream = _tcpClient.GetStream();
+
+            byte[] handshake = FrameCodec.EncodeSubscribeReq(_subscribedTexIds);
+            _stream.Write(handshake, 0, handshake.Length);
+
             _connected = true;
             _running = true;
-            _texWidth = SceneConfig.TextureWidth;
-            _texHeight = SceneConfig.TextureHeight;
-            _initialized = true;
             _receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
             _receiveThread.Start();
         }
@@ -90,12 +101,22 @@ public class StreamClient : MonoBehaviour
     {
         _running = false;
         _connected = false;
-        _initialized = false;
         _receiveThread?.Join(500);
         Close();
         while (_frameQueue.TryDequeue(out FrameEntry _)) { }
         _batch.Clear();
         ReleasePayloadBuffer();
+        _meta.Clear();
+    }
+
+    public void BindOutputTexture(byte texId, RenderTexture rt)
+    {
+        _outputTextures[texId] = rt;
+    }
+
+    public void UnbindOutputTexture(byte texId)
+    {
+        _outputTextures.Remove(texId);
     }
 
     void Update()
@@ -121,17 +142,31 @@ public class StreamClient : MonoBehaviour
         List<int> collectedIndices = new List<int>();
         foreach (byte[] pkt in _batch)
         {
+            byte frameType = pkt[0];
+
+            if (frameType == (byte)FrameType.TextureAnnounce)
+            {
+                ProcessAnnounce(pkt);
+                continue;
+            }
+
             byte[] raw = FrameCodec.IsCompressed(pkt) ? UncompressPacket(pkt) : pkt;
-            ApplyPacket(raw);
-            ushort tc = BitConverter.ToUInt16(raw, 1);
+
+            if (raw[0] != (byte)FrameType.DeltaFrame) continue;
+
+            byte texId = FrameCodec.GetTexId(raw);
+            ushort tc = FrameCodec.GetTileCount(raw);
             dirtyReceived += tc;
-            int pos = FrameCodec.HeaderSize;
-            int tileBytes = SceneConfig.TileSize * SceneConfig.TileSize * 4;
+
+            int tileBytes = FrameCodec.GetBytesPerTile();
+            int pos = FrameCodec.TilePayloadOffset;
             for (int j = 0; j < tc; j++)
             {
                 collectedIndices.Add(BitConverter.ToInt32(raw, pos));
                 pos += 4 + tileBytes;
             }
+
+            ApplyPacket(texId, raw);
         }
         DirtyTilesReceived = dirtyReceived;
 
@@ -143,6 +178,16 @@ public class StreamClient : MonoBehaviour
         }
 
         _batch.Clear();
+    }
+
+    void ProcessAnnounce(byte[] packet)
+    {
+        if (!FrameCodec.TryParseTextureAnnounce(packet, out byte texId, out ushort texW, out ushort texH))
+            return;
+
+        _meta[texId] = new TextureMeta { Width = texW, Height = texH };
+        Debug.Log($"StreamClient: TextureAnnounce texId={texId} ({texW}x{texH})");
+        OnTextureAnnounce?.Invoke(texId, texW, texH);
     }
 
     void ReceiveLoop()
@@ -183,10 +228,10 @@ public class StreamClient : MonoBehaviour
         return true;
     }
 
-    void ApplyPacket(byte[] packet)
+    void ApplyPacket(byte texId, byte[] packet)
     {
         _downProcBandwidth.Add(packet.Length);
-        TryApplyGpu(packet);
+        TryApplyGpu(texId, packet);
     }
 
     byte[] UncompressPacket(byte[] packet)
@@ -209,27 +254,31 @@ public class StreamClient : MonoBehaviour
         return newPacket;
     }
 
-    bool TryApplyGpu(byte[] packet)
+    bool TryApplyGpu(byte texId, byte[] packet)
     {
-        RenderTexture rt = SceneConfig.DisplayRT;
+        if (!_meta.TryGetValue(texId, out TextureMeta meta))
+            return true;
+
+        RenderTexture rt = null;
+        if (!_outputTextures.TryGetValue(texId, out rt) || rt == null)
+            rt = SceneConfig.DisplayRT;
+
         if (rt == null || !rt.enableRandomWrite)
         {
             ReleasePayloadBuffer();
             return false;
         }
 
-        if (!_initialized) return true;
-
-        int tileCount = BitConverter.ToUInt16(packet, 1);
+        int tileCount = FrameCodec.GetTileCount(packet);
         if (tileCount == 0) return true;
 
-        int payloadLen = packet.Length - FrameCodec.HeaderSize;
-        EnsurePayloadBuffer(_texWidth, _texHeight);
-        if (payloadLen > _payloadBuffer.count * 4) return true;
+        int effectivePayloadLen = packet.Length - FrameCodec.TilePayloadOffset;
+        EnsurePayloadBuffer(meta.Width, meta.Height);
+        if (effectivePayloadLen > _payloadBuffer.count * 4) return true;
 
-        _payloadBuffer.SetData(packet, FrameCodec.HeaderSize, 0, payloadLen);
+        _payloadBuffer.SetData(packet, FrameCodec.TilePayloadOffset, 0, effectivePayloadLen);
 
-        SetGpuParams(_texWidth, _texHeight);
+        SetGpuParams(meta.Width, meta.Height);
         _tileApplyShader.SetBuffer(_kApplyDelta, "_Payload", _payloadBuffer);
         _tileApplyShader.SetTexture(_kApplyDelta, "_OutRT", rt);
         _tileApplyShader.Dispatch(_kApplyDelta, tileCount, 1, 1);
@@ -280,5 +329,7 @@ public class StreamClient : MonoBehaviour
     {
         Disconnect();
         ReleasePayloadBuffer();
+        _meta.Clear();
+        _outputTextures.Clear();
     }
 }

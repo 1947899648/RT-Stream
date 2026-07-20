@@ -15,8 +15,9 @@ public class RTStreamReceiver : MonoBehaviour
 
     void Start()
     {
-        int w = SceneConfig.TextureWidth;
-        int h = SceneConfig.TextureHeight;
+        const int DefaultSize = 512;
+        int w = DefaultSize;
+        int h = DefaultSize;
         if (w < 64) w = 64;
         if (w > 8192) w = 8192;
         if (h < 64) h = 64;

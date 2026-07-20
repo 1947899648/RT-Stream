@@ -10,6 +10,8 @@ public class GpuTileDiffer
     private int TilesX { get; set; }
     private int TilesY { get; set; }
     public int DiagReadbackBytes { get; private set; }
+    public int TexWidth => _texWidth;
+    public int TexHeight => _texHeight;
 
     private int _texWidth, _texHeight;
     private int _tileSize, _tilePixels, _tileBytes, _tileCount;
