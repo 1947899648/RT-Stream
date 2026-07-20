@@ -9,15 +9,7 @@ namespace WPZ0325.RTStream
     /// </summary>
     public static class LZ4
     {
-        // LZ4 规范要求的最小匹配长度（4 字节）
-        private const int MIN_MATCH = 4;
-        // 哈希表位宽，决定查重窗口大小
-        private const int HASH_LOG = 14;
-        private const int HASH_SIZE = 1 << HASH_LOG;
-        // LZ4 格式中偏移量以 2 字节存储，上限 65535
-        private const int MAX_OFFSET = 65535;
-        // 块末尾必须保留的文字段最小长度，防止扫描越界
-        private const int LAST_LITERALS = 5;
+        #region 公开 API
 
         /// <summary>
         /// 压缩原始数据并封装为带长度头的 LZ4 格式包。
@@ -79,6 +71,24 @@ namespace WPZ0325.RTStream
             return Decompress(input, 4, decompressedSize);
         }
 
+        #endregion
+
+        #region 私有常量
+
+        // LZ4 规范要求的最小匹配长度（4 字节）
+        private const int MIN_MATCH = 4;
+        // 哈希表位宽，决定查重窗口大小
+        private const int HASH_LOG = 14;
+        private const int HASH_SIZE = 1 << HASH_LOG;
+        // LZ4 格式中偏移量以 2 字节存储，上限 65535
+        private const int MAX_OFFSET = 65535;
+        // 块末尾必须保留的文字段最小长度，防止扫描越界
+        private const int LAST_LITERALS = 5;
+
+        #endregion
+
+        #region 压缩核心
+
         // 对输入数据做 LZ4 块压缩，返回纯压缩数据（不含头部）
         private static byte[] Compress(byte[] input)
         {
@@ -121,6 +131,51 @@ namespace WPZ0325.RTStream
 
             return output.ToArray();
         }
+
+        // 编码一个序列块：文字段 + 匹配（偏移量 + 长度）
+        private static void EncodeSequence(List<byte> dst, int litLen, int matchLen, byte[] src, int litStart, int offset)
+        {
+            // 构造令牌字节：高 4 位 = 文字长度，低 4 位 = 匹配长度
+            byte token = 0;
+
+            if (litLen >= 15) { token |= (15 << 4); }
+            else { token |= (byte)(litLen << 4); }
+
+            if (matchLen >= 15) { token |= 15; }
+            else { token |= (byte)matchLen; }
+
+            dst.Add(token);
+
+            // 扩展文字长度（超过 14 的部分用可变长度编码）
+            if (litLen >= 15) WriteVarLen(dst, litLen - 15);
+
+            // 写入文字段原始数据
+            for (int i = 0; i < litLen; i++)
+                dst.Add(src[litStart + i]);
+
+            // 写入 2 字节偏移量（小端序）
+            dst.Add((byte)offset);
+            dst.Add((byte)(offset >> 8));
+
+            // 扩展匹配长度
+            if (matchLen >= 15) WriteVarLen(dst, matchLen - 15);
+        }
+
+        // 编码末尾文字段（无后续匹配，仅包含文字段）
+        private static void EncodeLastLiterals(List<byte> dst, int litLen, byte[] src, int litStart)
+        {
+            byte token = (byte)(litLen >= 15 ? (15 << 4) : (litLen << 4));
+            dst.Add(token);
+
+            if (litLen >= 15) WriteVarLen(dst, litLen - 15);
+
+            for (int i = 0; i < litLen; i++)
+                dst.Add(src[litStart + i]);
+        }
+
+        #endregion
+
+        #region 解压核心
 
         // LZ4 解压缩核心：逐令牌解析文字段与匹配序列
         private static byte[] Decompress(byte[] input, int start, int outputLen)
@@ -168,46 +223,19 @@ namespace WPZ0325.RTStream
             return output;
         }
 
-        // 编码一个序列块：文字段 + 匹配（偏移量 + 长度）
-        private static void EncodeSequence(List<byte> dst, int litLen, int matchLen, byte[] src, int litStart, int offset)
+        // 读取 LZ4 可变长度编码值
+        private static int ReadVarLen(byte[] src, ref int pos)
         {
-            // 构造令牌字节：高 4 位 = 文字长度，低 4 位 = 匹配长度
-            byte token = 0;
-
-            if (litLen >= 15) { token |= (15 << 4); }
-            else { token |= (byte)(litLen << 4); }
-
-            if (matchLen >= 15) { token |= 15; }
-            else { token |= (byte)matchLen; }
-
-            dst.Add(token);
-
-            // 扩展文字长度（超过 14 的部分用可变长度编码）
-            if (litLen >= 15) WriteVarLen(dst, litLen - 15);
-
-            // 写入文字段原始数据
-            for (int i = 0; i < litLen; i++)
-                dst.Add(src[litStart + i]);
-
-            // 写入 2 字节偏移量（小端序）
-            dst.Add((byte)offset);
-            dst.Add((byte)(offset >> 8));
-
-            // 扩展匹配长度
-            if (matchLen >= 15) WriteVarLen(dst, matchLen - 15);
+            int value = 0;
+            byte b;
+            while ((b = src[pos++]) == 255)
+                value += 255;
+            return value + b;
         }
 
-        // 编码末尾文字段（无后续匹配，仅包含文字段）
-        private static void EncodeLastLiterals(List<byte> dst, int litLen, byte[] src, int litStart)
-        {
-            byte token = (byte)(litLen >= 15 ? (15 << 4) : (litLen << 4));
-            dst.Add(token);
+        #endregion
 
-            if (litLen >= 15) WriteVarLen(dst, litLen - 15);
-
-            for (int i = 0; i < litLen; i++)
-                dst.Add(src[litStart + i]);
-        }
+        #region 哈希工具
 
         // 写入 LZ4 可变长度编码值（每字节最多承载 255）
         private static void WriteVarLen(List<byte> dst, int value)
@@ -218,16 +246,6 @@ namespace WPZ0325.RTStream
                 value -= 255;
             }
             dst.Add((byte)value);
-        }
-
-        // 读取 LZ4 可变长度编码值
-        private static int ReadVarLen(byte[] src, ref int pos)
-        {
-            int value = 0;
-            byte b;
-            while ((b = src[pos++]) == 255)
-                value += 255;
-            return value + b;
         }
 
         // 计算 4 字节窗口的乘法哈希值，用于哈希表索引
@@ -248,5 +266,7 @@ namespace WPZ0325.RTStream
             }
             return p2 - start;
         }
+
+        #endregion
     }
 }

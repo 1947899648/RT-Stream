@@ -15,70 +15,7 @@ namespace WPZ0325.RTStream
     /// </summary>
     public class MonoRTStreamReceiver : MonoBehaviour
     {
-        [SerializeField] private ComputeShader _tileApplyShader;
-
-        /// <summary>
-        /// 接收到的帧条目。包含帧数据和接收时间戳，用于批量处理和延迟计算。
-        /// </summary>
-        private struct FrameEntry
-        {
-            public byte[] data;
-            /// <summary>接收时刻的 Stopwatch 时间戳</summary>
-            public long recvTimestamp;
-            /// <summary>网络延迟（ms），基于发送端时间戳计算</summary>
-            public float netLagMs;
-        }
-
-        /// <summary>
-        /// 纹理元数据：记录从发送端公告中获取的纹理尺寸。
-        /// </summary>
-        private struct TextureMeta
-        {
-            public ushort Width;
-            public ushort Height;
-        }
-
-        private TcpClient _tcpClient;
-        private NetworkStream _stream;
-        private Thread _receiveThread;
-        // 使用无锁并发队列收集接收线程的数据，主线程轮询消费
-        private ConcurrentQueue<FrameEntry> _frameQueue = new ConcurrentQueue<FrameEntry>();
-        private bool _connected;
-        private bool _running;
-
-        // 每帧批量处理：先将帧数据收集到 _batch，然后批量 Apply
-        private List<byte[]> _batch = new List<byte[]>();
-        private int _lastBatchSize;
-
-        // GPU 端用于传递瓦片数据的 ComputeBuffer
-        private ComputeBuffer _payloadBuffer;
-        private int _kApplyDelta;
-        private Dictionary<byte, TextureMeta> _meta = new Dictionary<byte, TextureMeta>();
-        private Dictionary<byte, RenderTexture> _outputTextures = new Dictionary<byte, RenderTexture>();
-        /// <summary>连接时指定的订阅纹理 ID 数组</summary>
-        private byte[] _subscribedTexIds;
-
-        private float _netLagMs;
-        private float _localLagMs;
-        /// <summary>最近一次接收数据的 Stopwatch 时间戳，用于计算静默时间</summary>
-        private long _lastRecvWatchTimestamp;
-
-        private BandwidthMeter _downRecvBandwidth = new BandwidthMeter();
-        private BandwidthMeter _downProcBandwidth = new BandwidthMeter();
-
-        /// <summary>下行接收带宽（MB/s）</summary>
-        public float DownRecvMBps => _downRecvBandwidth.MBps;
-        /// <summary>下行处理带宽（MB/s，解码+GPU 应用）</summary>
-        public float DownProcMBps => _downProcBandwidth.MBps;
-
-        /// <summary>
-        /// 脏瓦片被应用到渲染纹理后触发。
-        /// </summary>
-        public event System.Action<byte, int[]> OnDirtyTilesApplied;
-        /// <summary>
-        /// 接收到纹理公告帧后触发。参数为纹理 ID、宽度、高度。
-        /// </summary>
-        public event System.Action<byte, int, int> OnTextureAnnounce;
+        #region 公开属性
 
         /// <summary>是否已连接到发送端</summary>
         public bool IsConnected => _connected;
@@ -94,6 +31,11 @@ namespace WPZ0325.RTStream
         public string RemoteHost { get; private set; }
         /// <summary>远端发送端端口</summary>
         public int RemotePort { get; private set; }
+
+        /// <summary>下行接收带宽（MB/s）</summary>
+        public float DownRecvMBps => _downRecvBandwidth.MBps;
+        /// <summary>下行处理带宽（MB/s，解码+GPU 应用）</summary>
+        public float DownProcMBps => _downProcBandwidth.MBps;
 
         /// <summary>
         /// 尝试获取第一个已接收纹理公告的尺寸信息。
@@ -115,25 +57,6 @@ namespace WPZ0325.RTStream
         }
 
         /// <summary>
-        /// 获取所有已接收纹理公告的诊断信息列表。
-        /// </summary>
-        /// <returns>纹理信息列表</returns>
-        public List<DiagTextureInfo> GetDiagTextureList()
-        {
-            List<DiagTextureInfo> list = new List<DiagTextureInfo>();
-            foreach (KeyValuePair<byte, TextureMeta> kv in _meta)
-            {
-                list.Add(new DiagTextureInfo
-                {
-                    TexId = kv.Key,
-                    Width = kv.Value.Width,
-                    Height = kv.Value.Height
-                });
-            }
-            return list;
-        }
-
-        /// <summary>
         /// 距离最后一次收到数据的静默时间（毫秒）。
         /// </summary>
         public float SilenceMs
@@ -144,6 +67,23 @@ namespace WPZ0325.RTStream
                 return (Stopwatch.GetTimestamp() - _lastRecvWatchTimestamp) * 1000f / Stopwatch.Frequency;
             }
         }
+
+        #endregion
+
+        #region 公开事件
+
+        /// <summary>
+        /// 脏瓦片被应用到渲染纹理后触发。
+        /// </summary>
+        public event System.Action<byte, int[]> OnDirtyTilesApplied;
+        /// <summary>
+        /// 接收到纹理公告帧后触发。参数为纹理 ID、宽度、高度。
+        /// </summary>
+        public event System.Action<byte, int, int> OnTextureAnnounce;
+
+        #endregion
+
+        #region 公开方法
 
         /// <summary>
         /// 连接到发送端并开始接收数据。
@@ -222,6 +162,29 @@ namespace WPZ0325.RTStream
             _outputTextures.Remove(texId);
         }
 
+        /// <summary>
+        /// 获取所有已接收纹理公告的诊断信息列表。
+        /// </summary>
+        /// <returns>纹理信息列表</returns>
+        public List<DiagTextureInfo> GetDiagTextureList()
+        {
+            List<DiagTextureInfo> list = new List<DiagTextureInfo>();
+            foreach (KeyValuePair<byte, TextureMeta> kv in _meta)
+            {
+                list.Add(new DiagTextureInfo
+                {
+                    TexId = kv.Key,
+                    Width = kv.Value.Width,
+                    Height = kv.Value.Height
+                });
+            }
+            return list;
+        }
+
+        #endregion
+
+        #region Unity 生命周期
+
         void Update()
         {
             if (!_connected) return;
@@ -283,6 +246,77 @@ namespace WPZ0325.RTStream
             _batch.Clear();
         }
 
+        void OnDestroy()
+        {
+            Disconnect();
+            ReleasePayloadBuffer();
+            _meta.Clear();
+            _outputTextures.Clear();
+        }
+
+        #endregion
+
+        #region 内部结构体
+
+        /// <summary>
+        /// 接收到的帧条目。包含帧数据和接收时间戳，用于批量处理和延迟计算。
+        /// </summary>
+        private struct FrameEntry
+        {
+            public byte[] data;
+            /// <summary>接收时刻的 Stopwatch 时间戳</summary>
+            public long recvTimestamp;
+            /// <summary>网络延迟（ms），基于发送端时间戳计算</summary>
+            public float netLagMs;
+        }
+
+        /// <summary>
+        /// 纹理元数据：记录从发送端公告中获取的纹理尺寸。
+        /// </summary>
+        private struct TextureMeta
+        {
+            public ushort Width;
+            public ushort Height;
+        }
+
+        #endregion
+
+        #region 序列化与私有字段
+
+        [SerializeField] private ComputeShader _tileApplyShader;
+
+        private TcpClient _tcpClient;
+        private NetworkStream _stream;
+        private Thread _receiveThread;
+        // 使用无锁并发队列收集接收线程的数据，主线程轮询消费
+        private ConcurrentQueue<FrameEntry> _frameQueue = new ConcurrentQueue<FrameEntry>();
+        private bool _connected;
+        private bool _running;
+
+        // 每帧批量处理：先将帧数据收集到 _batch，然后批量 Apply
+        private List<byte[]> _batch = new List<byte[]>();
+        private int _lastBatchSize;
+
+        // GPU 端用于传递瓦片数据的 ComputeBuffer
+        private ComputeBuffer _payloadBuffer;
+        private int _kApplyDelta;
+        private Dictionary<byte, TextureMeta> _meta = new Dictionary<byte, TextureMeta>();
+        private Dictionary<byte, RenderTexture> _outputTextures = new Dictionary<byte, RenderTexture>();
+        /// <summary>连接时指定的订阅纹理 ID 数组</summary>
+        private byte[] _subscribedTexIds;
+
+        private float _netLagMs;
+        private float _localLagMs;
+        /// <summary>最近一次接收数据的 Stopwatch 时间戳，用于计算静默时间</summary>
+        private long _lastRecvWatchTimestamp;
+
+        private BandwidthMeter _downRecvBandwidth = new BandwidthMeter();
+        private BandwidthMeter _downProcBandwidth = new BandwidthMeter();
+
+        #endregion
+
+        #region 纹理元数据
+
         /// <summary>
         /// 处理纹理公告帧：解析并记录纹理元数据。
         /// </summary>
@@ -295,6 +329,10 @@ namespace WPZ0325.RTStream
             Debug.Log($"MonoRTStreamReceiver: TextureAnnounce texId={texId} ({texW}x{texH})");
             OnTextureAnnounce?.Invoke(texId, texW, texH);
         }
+
+        #endregion
+
+        #region 帧接收与解压
 
         // 接收线程主循环：按 4 字节长度头 + 数据体格式读取帧
         void ReceiveLoop()
@@ -338,15 +376,6 @@ namespace WPZ0325.RTStream
         }
 
         /// <summary>
-        /// 将解码后的帧数据通过 GPU ComputeShader 应用到输出纹理。
-        /// </summary>
-        void ApplyPacket(byte texId, byte[] packet)
-        {
-            _downProcBandwidth.Add(packet.Length);
-            TryApplyGpu(texId, packet);
-        }
-
-        /// <summary>
         /// 解压压缩帧包：提取压缩块，LZ4 解压，重建完整帧包。
         /// </summary>
         byte[] UncompressPacket(byte[] packet)
@@ -369,6 +398,19 @@ namespace WPZ0325.RTStream
             BitConverter.GetBytes((uint)payload.Length).CopyTo(newPacket, 3);
             Buffer.BlockCopy(payload, 0, newPacket, FrameCodec.HeaderSize, payload.Length);
             return newPacket;
+        }
+
+        #endregion
+
+        #region GPU应用
+
+        /// <summary>
+        /// 将解码后的帧数据通过 GPU ComputeShader 应用到输出纹理。
+        /// </summary>
+        void ApplyPacket(byte texId, byte[] packet)
+        {
+            _downProcBandwidth.Add(packet.Length);
+            TryApplyGpu(texId, packet);
         }
 
         /// <summary>
@@ -459,12 +501,6 @@ namespace WPZ0325.RTStream
             _tcpClient = null;
         }
 
-        void OnDestroy()
-        {
-            Disconnect();
-            ReleasePayloadBuffer();
-            _meta.Clear();
-            _outputTextures.Clear();
-        }
+        #endregion
     }
 }

@@ -13,12 +13,7 @@ namespace WPZ0325.RTStream
     /// </summary>
     public class TileDiffer
     {
-        /// <summary>目标渲染纹理</summary>
-        private RenderTexture RT { get; set; }
-        /// <summary>水平方向的瓦片数量</summary>
-        private int TilesX { get; set; }
-        /// <summary>垂直方向的瓦片数量</summary>
-        private int TilesY { get; set; }
+        #region 公开属性
 
         /// <summary>诊断用：最近一轮回读的总字节数</summary>
         public int DiagReadbackBytes { get; private set; }
@@ -27,32 +22,9 @@ namespace WPZ0325.RTStream
         /// <summary>纹理高度（像素）</summary>
         public int TexHeight => _texHeight;
 
-        private int _texWidth, _texHeight;
-        private int _tileSize, _tilePixels, _tileBytes, _tileCount;
+        #endregion
 
-        private ComputeShader _cs;
-        private int _kClear, _kHash, _kPrepArgs, _kGatherDirty, _kGatherAll;
-
-        private ComputeBuffer _prevHashesBuffer;
-        private ComputeBuffer _idxBuffer;
-        private ComputeBuffer _argsBuffer;
-        private ComputeBuffer _gatherBuffer;
-
-        private byte[] _idxRaw;
-        private int _dirtyCount;
-        private int _roundBytes;
-
-        private bool _resultReady;
-        private List<DirtyTile> _resultTiles;
-        private byte[] _resultFullFrame;
-        private List<DirtyTile> _dirtyTiles = new List<DirtyTile>();
-
-        // 状态机阶段：控制 AsyncGPUReadback 的异步流程
-        enum Phase { Idle, WaitingIdx, WaitingGather, WaitingKeyGather }
-        private Phase _phase = Phase.Idle;
-
-        private AsyncGPUReadbackRequest _idxRequest;
-        private AsyncGPUReadbackRequest _gatherRequest;
+        #region 公开方法
 
         /// <summary>
         /// 初始化瓦片差异检测器。
@@ -176,6 +148,32 @@ namespace WPZ0325.RTStream
             return true;
         }
 
+        /// <summary>
+        /// 释放所有 GPU 缓冲区资源。
+        /// </summary>
+        public void Dispose()
+        {
+            _prevHashesBuffer?.Release();
+            _idxBuffer?.Release();
+            _argsBuffer?.Release();
+            _gatherBuffer?.Release();
+            _prevHashesBuffer = null;
+            _idxBuffer = null;
+            _argsBuffer = null;
+            _gatherBuffer = null;
+        }
+
+        #endregion
+
+        #region GPU管线
+
+        // 状态机阶段：控制 AsyncGPUReadback 的异步流程
+        enum Phase { Idle, WaitingIdx, WaitingGather, WaitingKeyGather }
+        private Phase _phase = Phase.Idle;
+
+        private AsyncGPUReadbackRequest _idxRequest;
+        private AsyncGPUReadbackRequest _gatherRequest;
+
         // 轮询索引回读请求完成
         void PollIdx()
         {
@@ -256,19 +254,37 @@ namespace WPZ0325.RTStream
             _phase = Phase.Idle;
         }
 
-        /// <summary>
-        /// 释放所有 GPU 缓冲区资源。
-        /// </summary>
-        public void Dispose()
-        {
-            _prevHashesBuffer?.Release();
-            _idxBuffer?.Release();
-            _argsBuffer?.Release();
-            _gatherBuffer?.Release();
-            _prevHashesBuffer = null;
-            _idxBuffer = null;
-            _argsBuffer = null;
-            _gatherBuffer = null;
-        }
+        #endregion
+
+        #region 私有字段
+
+        /// <summary>目标渲染纹理</summary>
+        private RenderTexture RT { get; set; }
+        /// <summary>水平方向的瓦片数量</summary>
+        private int TilesX { get; set; }
+        /// <summary>垂直方向的瓦片数量</summary>
+        private int TilesY { get; set; }
+
+        private int _texWidth, _texHeight;
+        private int _tileSize, _tilePixels, _tileBytes, _tileCount;
+
+        private ComputeShader _cs;
+        private int _kClear, _kHash, _kPrepArgs, _kGatherDirty, _kGatherAll;
+
+        private ComputeBuffer _prevHashesBuffer;
+        private ComputeBuffer _idxBuffer;
+        private ComputeBuffer _argsBuffer;
+        private ComputeBuffer _gatherBuffer;
+
+        private byte[] _idxRaw;
+        private int _dirtyCount;
+        private int _roundBytes;
+
+        private bool _resultReady;
+        private List<DirtyTile> _resultTiles;
+        private byte[] _resultFullFrame;
+        private List<DirtyTile> _dirtyTiles = new List<DirtyTile>();
+
+        #endregion
     }
 }

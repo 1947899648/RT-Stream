@@ -9,17 +9,16 @@ namespace WPZ0325.RTStream
     /// </summary>
     public class BandwidthMeter
     {
-        // 通过原子操作累加的字节总数
-        private long _bytes;
-        // 上次采样的时间戳
-        private long _lastSampleTicks;
-        // 最近一次计算出的带宽（MB/s）
-        private float _mbps;
+        #region 公开属性
 
         /// <summary>
         /// 最近一次采样得出的带宽值（MB/s）。
         /// </summary>
         public float MBps => _mbps;
+
+        #endregion
+
+        #region 公开方法
 
         /// <summary>
         /// 重置所有计数器与采样状态。
@@ -61,5 +60,18 @@ namespace WPZ0325.RTStream
                 _lastSampleTicks = now;
             }
         }
+
+        #endregion
+
+        #region 私有字段
+
+        // 通过原子操作累加的字节总数
+        private long _bytes;
+        // 上次采样的时间戳
+        private long _lastSampleTicks;
+        // 最近一次计算出的带宽（MB/s）
+        private float _mbps;
+
+        #endregion
     }
 }

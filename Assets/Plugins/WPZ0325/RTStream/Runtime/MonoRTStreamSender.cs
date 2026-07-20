@@ -14,29 +14,7 @@ namespace WPZ0325.RTStream
     /// </summary>
     public class MonoRTStreamSender : MonoBehaviour
     {
-        [SerializeField] private ComputeShader _tileDiffShader;
-
-        private TcpListener _listener;
-        private List<ClientConnection> _clients = new List<ClientConnection>();
-        private object _clientsLock = new object();
-        private Thread _acceptThread;
-        private volatile bool _running;
-
-        // 单帧消息体最大尺寸限制，防止 TCP 粘包时缓冲区过大
-        private const int MaxMsgSize = 256 * 1024;
-
-        // 纹理 ID 分配器，自增分配
-        private byte _nextTexId = 0;
-        private Dictionary<byte, TextureEntry> _textures = new Dictionary<byte, TextureEntry>();
-
-        /// <summary>
-        /// 注册的纹理条目：包含 RenderTexture 引用及其对应的 TileDiffer 实例。
-        /// </summary>
-        private class TextureEntry
-        {
-            public RenderTexture RT;
-            public TileDiffer Differ;
-        }
+        #region 公开属性
 
         /// <summary>
         /// 当前连接的客户端数量（线程安全）。
@@ -106,10 +84,30 @@ namespace WPZ0325.RTStream
             get { lock (_clientsLock) return _textures.Count; }
         }
 
+        /// <summary>发送端是否正在运行</summary>
+        public bool IsRunning => _running;
+        /// <summary>当前监听端口号</summary>
+        public int ListenPort { get; private set; }
+
+        /// <summary>原始脏数据带宽（MB/s，含索引头）</summary>
+        public float RawDirtyMBps => _rawDirtyBandwidth.MBps;
+        /// <summary>编码后上行带宽（MB/s）</summary>
+        public float UpEncMBps => _upEncBandwidth.MBps;
+        /// <summary>实际发送上行带宽（MB/s，含 TCP 帧头）</summary>
+        public float UpSendMBps => _upSendBandwidth.MBps;
+
+        #endregion
+
+        #region 公开事件
+
         /// <summary>
         /// 当脏瓦片被检测到时触发。参数为纹理 ID 和脏瓦片索引数组。
         /// </summary>
         public event System.Action<byte, int[]> OnDirtyTilesDetected;
+
+        #endregion
+
+        #region 公开方法
 
         /// <summary>
         /// 获取所有已注册纹理的诊断信息列表。
@@ -133,17 +131,237 @@ namespace WPZ0325.RTStream
             return list;
         }
 
-        // 带宽计量器：分别统计原始脏数据量、编码后数据量、实际发送量
-        private BandwidthMeter _rawDirtyBandwidth = new BandwidthMeter();
-        private BandwidthMeter _upEncBandwidth = new BandwidthMeter();
-        private BandwidthMeter _upSendBandwidth = new BandwidthMeter();
+        /// <summary>
+        /// 注册一个渲染纹理用于流式传输。
+        /// </summary>
+        /// <param name="rt">待传输的 RenderTexture</param>
+        /// <returns>分配的纹理 ID</returns>
+        /// <exception cref="ArgumentNullException">rt 为 null 时抛出</exception>
+        public byte RegisterTexture(RenderTexture rt)
+        {
+            if (rt == null) throw new ArgumentNullException(nameof(rt));
 
-        /// <summary>原始脏数据带宽（MB/s，含索引头）</summary>
-        public float RawDirtyMBps => _rawDirtyBandwidth.MBps;
-        /// <summary>编码后上行带宽（MB/s）</summary>
-        public float UpEncMBps => _upEncBandwidth.MBps;
-        /// <summary>实际发送上行带宽（MB/s，含 TCP 帧头）</summary>
-        public float UpSendMBps => _upSendBandwidth.MBps;
+            byte texId;
+            lock (_clientsLock)
+            {
+                texId = _nextTexId++;
+                TileDiffer differ = new TileDiffer(rt, _tileDiffShader);
+                _textures.Add(texId, new TextureEntry { RT = rt, Differ = differ });
+
+                // 通知所有现有客户端新纹理已注册
+                foreach (ClientConnection c in _clients)
+                {
+                    if (!c.Alive) continue;
+                    if (c.IsSubscribed(texId))
+                    {
+                        // 如果客户端订阅了此纹理，标记需要发送关键帧
+                        if (c.PendingKeyFrames != null)
+                            c.PendingKeyFrames.Add(texId);
+                    }
+                    SendAnnounce(c, texId, (ushort)differ.TexWidth, (ushort)differ.TexHeight);
+                }
+            }
+
+            Debug.Log($"MonoRTStreamSender: Registered texId={texId} ({rt.width}x{rt.height})");
+            return texId;
+        }
+
+        /// <summary>
+        /// 注销一个纹理并释放其关联资源。
+        /// </summary>
+        /// <param name="texId">要注销的纹理 ID</param>
+        public void UnregisterTexture(byte texId)
+        {
+            lock (_clientsLock)
+            {
+                if (_textures.TryGetValue(texId, out TextureEntry entry))
+                {
+                    entry.Differ.Dispose();
+                    _textures.Remove(texId);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 启动 TCP 监听服务。
+        /// </summary>
+        /// <param name="port">监听端口号</param>
+        public void StartHost(int port)
+        {
+            StopHost();
+
+            ListenPort = port;
+            _listener = new TcpListener(IPAddress.Any, port);
+            _listener.Start();
+            _running = true;
+            _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
+            _acceptThread.Start();
+
+            Debug.Log($"MonoRTStreamSender: Started on port {port}");
+        }
+
+        /// <summary>
+        /// 停止 TCP 监听服务并断开所有客户端。
+        /// </summary>
+        public void StopHost()
+        {
+            _running = false;
+            _listener?.Stop();
+            _acceptThread?.Join(1000);
+
+            lock (_clientsLock)
+            {
+                foreach (ClientConnection c in _clients) c.Shutdown();
+                _clients.Clear();
+            }
+
+            _listener = null;
+            _acceptThread = null;
+
+            Debug.Log("MonoRTStreamSender: Stopped");
+        }
+
+        /// <summary>
+        /// 获取所有客户端的诊断信息字符串（队列深度等）。
+        /// </summary>
+        /// <returns>诊断字符串，无客户端时返回 null</returns>
+        public string GetClientDiagnostics()
+        {
+            lock (_clientsLock)
+            {
+                if (_clients.Count == 0) return null;
+
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < _clients.Count; i++)
+                {
+                    if (i > 0) sb.Append("    ");
+                    ClientConnection c = _clients[i];
+                    sb.Append('C').Append(i)
+                      .Append(" queue:").Append(c.QueueDepth);
+                }
+                return sb.ToString();
+            }
+        }
+
+        #endregion
+
+        #region Unity 生命周期
+
+        void Start()
+        {
+        }
+
+        void Update()
+        {
+            int totalClients;
+            lock (_clientsLock)
+            {
+                CleanupDeadClients();
+                totalClients = _clients.Count;
+            }
+
+            // 无客户端连接时跳过检测以节省性能
+            if (totalClients == 0) return;
+
+            int totalDirty = 0;
+
+            lock (_clientsLock)
+            {
+                foreach (KeyValuePair<byte, TextureEntry> kv in _textures)
+                {
+                    byte texId = kv.Key;
+                    TextureEntry entry = kv.Value;
+
+                    // 检查是否有客户端需要此纹理的关键帧
+                    bool wantKeyFrame = false;
+                    foreach (ClientConnection c in _clients)
+                    {
+                        if (!c.Alive) continue;
+                        if (c.IsSubscribed(texId) && c.PendingKeyFrames != null && c.PendingKeyFrames.Contains(texId))
+                        {
+                            wantKeyFrame = true;
+                            break;
+                        }
+                    }
+
+                    entry.Differ.Update(wantKeyFrame);
+
+                    if (!entry.Differ.TryGetResult(out List<DirtyTile> dirtyTiles, out byte[] fullFrame)) continue;
+
+                    ushort texW = (ushort)entry.Differ.TexWidth;
+                    ushort texH = (ushort)entry.Differ.TexHeight;
+
+                    if (fullFrame != null)
+                    {
+                        // 关键帧：将全帧数据拆分为瓦片后分批发给订阅客户端
+                        int rawBytes = 8 + fullFrame.Length;
+                        _rawDirtyBandwidth.Add(rawBytes);
+                        OnDirtyTilesDetected?.Invoke(texId, null);
+                        SendTiledKeyFrame(texId, texW, texH, fullFrame);
+                    }
+                    else if (dirtyTiles != null && dirtyTiles.Count > 0)
+                    {
+                        // 增量帧：将脏瓦片编码后广播给订阅客户端
+                        int tileBytes = FrameCodec.GetBytesPerTile();
+                        int rawBytes = dirtyTiles.Count * (4 + tileBytes);
+                        _rawDirtyBandwidth.Add(rawBytes);
+                        totalDirty += dirtyTiles.Count;
+
+                        int[] indices = new int[dirtyTiles.Count];
+                        for (int i = 0; i < dirtyTiles.Count; i++)
+                            indices[i] = dirtyTiles[i].index;
+                        OnDirtyTilesDetected?.Invoke(texId, indices);
+
+                        byte[] deltaPacket = FrameCodec.EncodeDeltaFrame(texId, dirtyTiles);
+                        _upEncBandwidth.Add(deltaPacket.Length);
+
+                        foreach (ClientConnection c in _clients)
+                        {
+                            if (!c.Alive || !c.IsSubscribed(texId)) continue;
+                            c.Enqueue(deltaPacket);
+                        }
+                    }
+                }
+            }
+
+            DiagDirtyTiles = totalDirty;
+
+            // 更新带宽统计
+            _rawDirtyBandwidth.Sample();
+            _upEncBandwidth.Sample();
+            _upSendBandwidth.Sample();
+        }
+
+        void OnDestroy()
+        {
+            _running = false;
+            _listener?.Stop();
+
+            lock (_clientsLock)
+            {
+                foreach (ClientConnection c in _clients) c.Shutdown();
+                _clients.Clear();
+
+                foreach (TextureEntry entry in _textures.Values)
+                    entry.Differ.Dispose();
+                _textures.Clear();
+            }
+
+            _acceptThread?.Join(1000);
+        }
+
+        #endregion
+
+        #region 内部类型
+
+        /// <summary>
+        /// 注册的纹理条目：包含 RenderTexture 引用及其对应的 TileDiffer 实例。
+        /// </summary>
+        private class TextureEntry
+        {
+            public RenderTexture RT;
+            public TileDiffer Differ;
+        }
 
         /// <summary>
         /// TCP 客户端连接管理。每个实例对应一个远程接收端，包含独立的发送线程和消息队列。
@@ -262,185 +480,33 @@ namespace WPZ0325.RTStream
             }
         }
 
-        /// <summary>
-        /// 注册一个渲染纹理用于流式传输。
-        /// </summary>
-        /// <param name="rt">待传输的 RenderTexture</param>
-        /// <returns>分配的纹理 ID</returns>
-        /// <exception cref="ArgumentNullException">rt 为 null 时抛出</exception>
-        public byte RegisterTexture(RenderTexture rt)
-        {
-            if (rt == null) throw new ArgumentNullException(nameof(rt));
+        #endregion
 
-            byte texId;
-            lock (_clientsLock)
-            {
-                texId = _nextTexId++;
-                TileDiffer differ = new TileDiffer(rt, _tileDiffShader);
-                _textures.Add(texId, new TextureEntry { RT = rt, Differ = differ });
+        #region 序列化与私有字段
 
-                // 通知所有现有客户端新纹理已注册
-                foreach (ClientConnection c in _clients)
-                {
-                    if (!c.Alive) continue;
-                    if (c.IsSubscribed(texId))
-                    {
-                        // 如果客户端订阅了此纹理，标记需要发送关键帧
-                        if (c.PendingKeyFrames != null)
-                            c.PendingKeyFrames.Add(texId);
-                    }
-                    SendAnnounce(c, texId, (ushort)differ.TexWidth, (ushort)differ.TexHeight);
-                }
-            }
+        [SerializeField] private ComputeShader _tileDiffShader;
 
-            Debug.Log($"MonoRTStreamSender: Registered texId={texId} ({rt.width}x{rt.height})");
-            return texId;
-        }
+        private TcpListener _listener;
+        private List<ClientConnection> _clients = new List<ClientConnection>();
+        private object _clientsLock = new object();
+        private Thread _acceptThread;
+        private volatile bool _running;
 
-        /// <summary>
-        /// 注销一个纹理并释放其关联资源。
-        /// </summary>
-        /// <param name="texId">要注销的纹理 ID</param>
-        public void UnregisterTexture(byte texId)
-        {
-            lock (_clientsLock)
-            {
-                if (_textures.TryGetValue(texId, out TextureEntry entry))
-                {
-                    entry.Differ.Dispose();
-                    _textures.Remove(texId);
-                }
-            }
-        }
+        // 单帧消息体最大尺寸限制，防止 TCP 粘包时缓冲区过大
+        private const int MaxMsgSize = 256 * 1024;
 
-        /// <summary>发送端是否正在运行</summary>
-        public bool IsRunning => _running;
-        /// <summary>当前监听端口号</summary>
-        public int ListenPort { get; private set; }
+        // 纹理 ID 分配器，自增分配
+        private byte _nextTexId = 0;
+        private Dictionary<byte, TextureEntry> _textures = new Dictionary<byte, TextureEntry>();
 
-        /// <summary>
-        /// 启动 TCP 监听服务。
-        /// </summary>
-        /// <param name="port">监听端口号</param>
-        public void StartHost(int port)
-        {
-            StopHost();
+        // 带宽计量器：分别统计原始脏数据量、编码后数据量、实际发送量
+        private BandwidthMeter _rawDirtyBandwidth = new BandwidthMeter();
+        private BandwidthMeter _upEncBandwidth = new BandwidthMeter();
+        private BandwidthMeter _upSendBandwidth = new BandwidthMeter();
 
-            ListenPort = port;
-            _listener = new TcpListener(IPAddress.Any, port);
-            _listener.Start();
-            _running = true;
-            _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
-            _acceptThread.Start();
+        #endregion
 
-            Debug.Log($"MonoRTStreamSender: Started on port {port}");
-        }
-
-        /// <summary>
-        /// 停止 TCP 监听服务并断开所有客户端。
-        /// </summary>
-        public void StopHost()
-        {
-            _running = false;
-            _listener?.Stop();
-            _acceptThread?.Join(1000);
-
-            lock (_clientsLock)
-            {
-                foreach (ClientConnection c in _clients) c.Shutdown();
-                _clients.Clear();
-            }
-
-            _listener = null;
-            _acceptThread = null;
-
-            Debug.Log("MonoRTStreamSender: Stopped");
-        }
-
-        void Start()
-        {
-        }
-
-        void Update()
-        {
-            int totalClients;
-            lock (_clientsLock)
-            {
-                CleanupDeadClients();
-                totalClients = _clients.Count;
-            }
-
-            // 无客户端连接时跳过检测以节省性能
-            if (totalClients == 0) return;
-
-            int totalDirty = 0;
-
-            lock (_clientsLock)
-            {
-                foreach (KeyValuePair<byte, TextureEntry> kv in _textures)
-                {
-                    byte texId = kv.Key;
-                    TextureEntry entry = kv.Value;
-
-                    // 检查是否有客户端需要此纹理的关键帧
-                    bool wantKeyFrame = false;
-                    foreach (ClientConnection c in _clients)
-                    {
-                        if (!c.Alive) continue;
-                        if (c.IsSubscribed(texId) && c.PendingKeyFrames != null && c.PendingKeyFrames.Contains(texId))
-                        {
-                            wantKeyFrame = true;
-                            break;
-                        }
-                    }
-
-                    entry.Differ.Update(wantKeyFrame);
-
-                    if (!entry.Differ.TryGetResult(out List<DirtyTile> dirtyTiles, out byte[] fullFrame)) continue;
-
-                    ushort texW = (ushort)entry.Differ.TexWidth;
-                    ushort texH = (ushort)entry.Differ.TexHeight;
-
-                    if (fullFrame != null)
-                    {
-                        // 关键帧：将全帧数据拆分为瓦片后分批发给订阅客户端
-                        int rawBytes = 8 + fullFrame.Length;
-                        _rawDirtyBandwidth.Add(rawBytes);
-                        OnDirtyTilesDetected?.Invoke(texId, null);
-                        SendTiledKeyFrame(texId, texW, texH, fullFrame);
-                    }
-                    else if (dirtyTiles != null && dirtyTiles.Count > 0)
-                    {
-                        // 增量帧：将脏瓦片编码后广播给订阅客户端
-                        int tileBytes = FrameCodec.GetBytesPerTile();
-                        int rawBytes = dirtyTiles.Count * (4 + tileBytes);
-                        _rawDirtyBandwidth.Add(rawBytes);
-                        totalDirty += dirtyTiles.Count;
-
-                        int[] indices = new int[dirtyTiles.Count];
-                        for (int i = 0; i < dirtyTiles.Count; i++)
-                            indices[i] = dirtyTiles[i].index;
-                        OnDirtyTilesDetected?.Invoke(texId, indices);
-
-                        byte[] deltaPacket = FrameCodec.EncodeDeltaFrame(texId, dirtyTiles);
-                        _upEncBandwidth.Add(deltaPacket.Length);
-
-                        foreach (ClientConnection c in _clients)
-                        {
-                            if (!c.Alive || !c.IsSubscribed(texId)) continue;
-                            c.Enqueue(deltaPacket);
-                        }
-                    }
-                }
-            }
-
-            DiagDirtyTiles = totalDirty;
-
-            // 更新带宽统计
-            _rawDirtyBandwidth.Sample();
-            _upEncBandwidth.Sample();
-            _upSendBandwidth.Sample();
-        }
+        #region 连接与帧处理
 
         /// <summary>
         /// 向指定客户端发送纹理公告帧。
@@ -602,44 +668,6 @@ namespace WPZ0325.RTStream
             return true;
         }
 
-        /// <summary>
-        /// 获取所有客户端的诊断信息字符串（队列深度等）。
-        /// </summary>
-        /// <returns>诊断字符串，无客户端时返回 null</returns>
-        public string GetClientDiagnostics()
-        {
-            lock (_clientsLock)
-            {
-                if (_clients.Count == 0) return null;
-
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < _clients.Count; i++)
-                {
-                    if (i > 0) sb.Append("    ");
-                    ClientConnection c = _clients[i];
-                    sb.Append('C').Append(i)
-                      .Append(" queue:").Append(c.QueueDepth);
-                }
-                return sb.ToString();
-            }
-        }
-
-        void OnDestroy()
-        {
-            _running = false;
-            _listener?.Stop();
-
-            lock (_clientsLock)
-            {
-                foreach (ClientConnection c in _clients) c.Shutdown();
-                _clients.Clear();
-
-                foreach (TextureEntry entry in _textures.Values)
-                    entry.Differ.Dispose();
-                _textures.Clear();
-            }
-
-            _acceptThread?.Join(1000);
-        }
+        #endregion
     }
 }
