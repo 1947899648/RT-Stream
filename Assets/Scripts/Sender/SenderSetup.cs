@@ -1,13 +1,25 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class SenderSetup : MonoBehaviour
 {
-    [SerializeField] private DrawingCanvas _canvasA;
-    [SerializeField] private DrawingCanvas _canvasB;
+    [SerializeField] private DrawController _drawController;
     [SerializeField] private StreamHost _streamHost;
+
+    private Dictionary<string, byte> _nameToTexId = new Dictionary<string, byte>();
 
     void Start()
     {
+        if (_drawController == null)
+        {
+            _drawController = FindObjectOfType<DrawController>();
+            if (_drawController == null)
+            {
+                Debug.LogError("SenderSetup: No DrawController found in scene.");
+                return;
+            }
+        }
+
         if (_streamHost == null)
         {
             _streamHost = FindObjectOfType<StreamHost>();
@@ -18,16 +30,15 @@ public class SenderSetup : MonoBehaviour
             }
         }
 
-        if (_canvasA != null && _canvasA.CanvasTexture != null)
+        for (int i = 0; i < _drawController.EntryCount; i++)
         {
-            byte idA = _streamHost.RegisterTexture(_canvasA.CanvasTexture);
-            Debug.Log($"SenderSetup: Registered canvasA → texId={idA}");
-        }
+            string name = _drawController.GetCanvasName(i);
+            RenderTexture rt = _drawController.GetCanvasTexture(name);
+            if (rt == null) continue;
 
-        if (_canvasB != null && _canvasB.CanvasTexture != null)
-        {
-            byte idB = _streamHost.RegisterTexture(_canvasB.CanvasTexture);
-            Debug.Log($"SenderSetup: Registered canvasB → texId={idB}");
+            byte texId = _streamHost.RegisterTexture(rt);
+            _nameToTexId[name] = texId;
+            Debug.Log($"SenderSetup: Registered \"{name}\" → texId={texId}");
         }
     }
 }

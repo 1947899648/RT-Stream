@@ -15,7 +15,7 @@ public class DiagnosticPanel : MonoBehaviour
     private float _deltaTime;
 
     private string _role;
-    private DrawingCanvas _canvas;
+    private DrawController _canvas;
     private StreamHost _host;
     private StreamClient _client;
 
@@ -442,7 +442,7 @@ public class DiagnosticPanel : MonoBehaviour
         if (_host != null) _host.OnDirtyTilesDetected -= OnDirtyTiles;
         if (_client != null) _client.OnDirtyTilesApplied -= OnDirtyTiles;
 
-        _canvas = FindObjectOfType<DrawingCanvas>();
+        _canvas = FindObjectOfType<DrawController>();
         _host = FindObjectOfType<StreamHost>();
         _client = FindObjectOfType<StreamClient>();
 
