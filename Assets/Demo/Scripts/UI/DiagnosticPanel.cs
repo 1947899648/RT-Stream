@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using WPZ0325.RTStream;
 
 public class DiagnosticPanel : MonoBehaviour
 {

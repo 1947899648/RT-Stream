@@ -1,40 +1,43 @@
+using System.Diagnostics;
 using System.Threading;
-using UnityEngine;
 
-public class BandwidthMeter
+namespace WPZ0325.RTStream
 {
-    private long _bytes;
-    private float _lastSampleTime;
-    private float _mbps;
-
-    public float MBps => _mbps;
-
-    public void Reset()
+    public class BandwidthMeter
     {
-        _bytes = 0;
-        _lastSampleTime = 0f;
-        _mbps = 0f;
-    }
-
-    public void Add(long count)
-    {
-        Interlocked.Add(ref _bytes, count);
-    }
-
-    public void Sample()
-    {
-        float now = Time.time;
-        float elapsed = now - _lastSampleTime;
-        if (_lastSampleTime == 0f)
+        private long _bytes;
+        private long _lastSampleTicks;
+        private float _mbps;
+    
+        public float MBps => _mbps;
+    
+        public void Reset()
         {
-            _lastSampleTime = now;
-            return;
+            _bytes = 0;
+            _lastSampleTicks = 0;
+            _mbps = 0f;
         }
-        if (elapsed >= 1f)
+    
+        public void Add(long count)
         {
-            long bytes = Interlocked.Exchange(ref _bytes, 0);
-            _mbps = bytes / elapsed / 1024f / 1024f;
-            _lastSampleTime = now;
+            Interlocked.Add(ref _bytes, count);
+        }
+    
+        public void Sample()
+        {
+            long now = Stopwatch.GetTimestamp();
+            if (_lastSampleTicks == 0)
+            {
+                _lastSampleTicks = now;
+                return;
+            }
+            float elapsed = (float)(now - _lastSampleTicks) / Stopwatch.Frequency;
+            if (elapsed >= 1f)
+            {
+                long bytes = Interlocked.Exchange(ref _bytes, 0);
+                _mbps = bytes / elapsed / 1024f / 1024f;
+                _lastSampleTicks = now;
+            }
         }
     }
 }
