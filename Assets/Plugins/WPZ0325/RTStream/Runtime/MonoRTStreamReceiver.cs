@@ -6,7 +6,7 @@ using System.Net.Sockets;
 using System.Threading;
 using UnityEngine;
 
-public class StreamClient : MonoBehaviour
+public class MonoRTStreamReceiver : MonoBehaviour
 {
     [SerializeField] private ComputeShader _tileApplyShader;
 
@@ -125,7 +125,7 @@ public class StreamClient : MonoBehaviour
         }
         catch (Exception e)
         {
-            Debug.LogError($"StreamClient connect failed: {e.Message}");
+            Debug.LogError($"MonoRTStreamReceiver connect failed: {e.Message}");
             Close();
         }
     }
@@ -214,7 +214,7 @@ public class StreamClient : MonoBehaviour
             return;
 
         _meta[texId] = new TextureMeta { Width = texW, Height = texH };
-        Debug.Log($"StreamClient: TextureAnnounce texId={texId} ({texW}x{texH})");
+        Debug.Log($"MonoRTStreamReceiver: TextureAnnounce texId={texId} ({texW}x{texH})");
         OnTextureAnnounce?.Invoke(texId, texW, texH);
     }
 

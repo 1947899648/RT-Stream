@@ -8,7 +8,7 @@ public class ReceiverSetup : MonoBehaviour
     #region 序列化字段
 
     [Header("核心模块")]
-    [SerializeField] private StreamClient _streamClient;
+    [SerializeField] private MonoRTStreamReceiver _streamClient;
 
     [Header("显示目标")]
     [SerializeField] private MeshRenderer _cubeRenderer;
@@ -63,10 +63,10 @@ public class ReceiverSetup : MonoBehaviour
     {
         if (_streamClient == null)
         {
-            _streamClient = FindObjectOfType<StreamClient>();
+            _streamClient = FindObjectOfType<MonoRTStreamReceiver>();
             if (_streamClient == null)
             {
-                Debug.LogError("ReceiverSetup: No StreamClient found in scene.");
+                Debug.LogError("ReceiverSetup: No MonoRTStreamReceiver found in scene.");
                 return;
             }
         }

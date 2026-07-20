@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading;
 using UnityEngine;
 
-public class StreamHost : MonoBehaviour
+public class MonoRTStreamSender : MonoBehaviour
 {
     [SerializeField] private ComputeShader _tileDiffShader;
 
@@ -23,7 +23,7 @@ public class StreamHost : MonoBehaviour
     private class TextureEntry
     {
         public RenderTexture RT;
-        public GpuTileDiffer Differ;
+        public TileDiffer Differ;
     }
 
     public int ClientCount
@@ -195,7 +195,7 @@ public class StreamHost : MonoBehaviour
         lock (_clientsLock)
         {
             texId = _nextTexId++;
-            GpuTileDiffer differ = new GpuTileDiffer(rt, _tileDiffShader);
+            TileDiffer differ = new TileDiffer(rt, _tileDiffShader);
             _textures.Add(texId, new TextureEntry { RT = rt, Differ = differ });
 
             foreach (ClientConnection c in _clients)
@@ -210,7 +210,7 @@ public class StreamHost : MonoBehaviour
             }
         }
 
-        Debug.Log($"StreamHost: Registered texId={texId} ({rt.width}x{rt.height})");
+        Debug.Log($"MonoRTStreamSender: Registered texId={texId} ({rt.width}x{rt.height})");
         return texId;
     }
 
@@ -240,7 +240,7 @@ public class StreamHost : MonoBehaviour
         _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
         _acceptThread.Start();
 
-        Debug.Log($"StreamHost: Started on port {port}");
+        Debug.Log($"MonoRTStreamSender: Started on port {port}");
     }
 
     public void StopHost()
@@ -258,7 +258,7 @@ public class StreamHost : MonoBehaviour
         _listener = null;
         _acceptThread = null;
 
-        Debug.Log("StreamHost: Stopped");
+        Debug.Log("MonoRTStreamSender: Stopped");
     }
 
     void Start()

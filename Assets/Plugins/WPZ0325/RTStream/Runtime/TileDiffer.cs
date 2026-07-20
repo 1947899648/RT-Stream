@@ -4,7 +4,7 @@ using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-public class GpuTileDiffer
+public class TileDiffer
 {
     private RenderTexture RT { get; set; }
     private int TilesX { get; set; }
@@ -39,7 +39,7 @@ public class GpuTileDiffer
     private AsyncGPUReadbackRequest _idxRequest;
     private AsyncGPUReadbackRequest _gatherRequest;
 
-    public GpuTileDiffer(RenderTexture rt, ComputeShader shader)
+    public TileDiffer(RenderTexture rt, ComputeShader shader)
     {
         RT = rt;
         _cs = shader;

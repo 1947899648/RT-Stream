@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 public struct DirtyTile
 {
@@ -83,7 +82,6 @@ public static class FrameCodec
         {
             LastEncodeOrigBytes = origSize;
             LastEncodeComprBytes = comprSize;
-            Debug.Log($"<color=#88ccff>LZ4 Enc \u0394</color>  texId={texId}  {origSize / 1024f:F1}KB \u2192 {comprSize / 1024f:F1}KB  ({comprSize * 100f / origSize:F0}%)");
         }
 
         int finalPayloadLen = useCompressed ? compressed.Length : payloadLen;

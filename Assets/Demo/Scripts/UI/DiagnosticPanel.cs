@@ -29,8 +29,8 @@ public class DiagnosticPanel : MonoBehaviour
     #region 私有状态
 
     private string _role;
-    private StreamHost _host;
-    private StreamClient _client;
+    private MonoRTStreamSender _host;
+    private MonoRTStreamReceiver _client;
 
     private float _deltaTime;
     private int _activeTab;
@@ -102,8 +102,8 @@ public class DiagnosticPanel : MonoBehaviour
 
     void DetectRole()
     {
-        _host = FindObjectOfType<StreamHost>();
-        _client = FindObjectOfType<StreamClient>();
+        _host = FindObjectOfType<MonoRTStreamSender>();
+        _client = FindObjectOfType<MonoRTStreamReceiver>();
 
         if (_host != null)
             _role = "Sender (Host)";

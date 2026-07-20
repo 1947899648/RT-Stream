@@ -7,7 +7,7 @@ public class SenderSetup : MonoBehaviour
     #region 序列化字段
 
     [SerializeField] private DrawController _drawController;
-    [SerializeField] private StreamHost _streamHost;
+    [SerializeField] private MonoRTStreamSender _streamHost;
 
     #endregion
 
@@ -46,10 +46,10 @@ public class SenderSetup : MonoBehaviour
 
         if (_streamHost == null)
         {
-            _streamHost = FindObjectOfType<StreamHost>();
+            _streamHost = FindObjectOfType<MonoRTStreamSender>();
             if (_streamHost == null)
             {
-                Debug.LogError("SenderSetup: No StreamHost found in scene.");
+                Debug.LogError("SenderSetup: No MonoRTStreamSender found in scene.");
                 return;
             }
         }
