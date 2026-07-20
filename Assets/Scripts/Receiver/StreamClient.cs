@@ -48,7 +48,7 @@ public class StreamClient : MonoBehaviour
     public float DownRecvMBps => _downRecvBandwidth.MBps;
     public float DownProcMBps => _downProcBandwidth.MBps;
 
-    public event System.Action<int[]> OnDirtyTilesApplied;
+    public event System.Action<byte, int[]> OnDirtyTilesApplied;
     public event System.Action<byte, int, int> OnTextureAnnounce;
 
     public bool IsConnected => _connected;
@@ -70,6 +70,21 @@ public class StreamClient : MonoBehaviour
         width = 0;
         height = 0;
         return false;
+    }
+
+    public List<DiagTextureInfo> GetDiagTextureList()
+    {
+        List<DiagTextureInfo> list = new List<DiagTextureInfo>();
+        foreach (KeyValuePair<byte, TextureMeta> kv in _meta)
+        {
+            list.Add(new DiagTextureInfo
+            {
+                TexId = kv.Key,
+                Width = kv.Value.Width,
+                Height = kv.Value.Height
+            });
+        }
+        return list;
     }
     public float SilenceMs
     {
@@ -157,7 +172,6 @@ public class StreamClient : MonoBehaviour
         _lastBatchSize = _batch.Count;
 
         int dirtyReceived = 0;
-        List<int> collectedIndices = new List<int>();
         foreach (byte[] pkt in _batch)
         {
             byte frameType = pkt[0];
@@ -176,24 +190,20 @@ public class StreamClient : MonoBehaviour
             ushort tc = FrameCodec.GetTileCount(raw);
             dirtyReceived += tc;
 
+            int[] indices = new int[tc];
             int tileBytes = FrameCodec.GetBytesPerTile();
             int pos = FrameCodec.TilePayloadOffset;
             for (int j = 0; j < tc; j++)
             {
-                collectedIndices.Add(BitConverter.ToInt32(raw, pos));
+                indices[j] = BitConverter.ToInt32(raw, pos);
                 pos += 4 + tileBytes;
             }
+
+            OnDirtyTilesApplied?.Invoke(texId, indices);
 
             ApplyPacket(texId, raw);
         }
         DirtyTilesReceived = dirtyReceived;
-
-        if (collectedIndices.Count > 0)
-        {
-            int[] arr = new int[collectedIndices.Count];
-            collectedIndices.CopyTo(arr);
-            OnDirtyTilesApplied?.Invoke(arr);
-        }
 
         _batch.Clear();
     }

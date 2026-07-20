@@ -73,7 +73,25 @@ public class StreamHost : MonoBehaviour
         get { lock (_clientsLock) return _textures.Count; }
     }
 
-    public event System.Action<int[]> OnDirtyTilesDetected;
+    public event System.Action<byte, int[]> OnDirtyTilesDetected;
+
+    public List<DiagTextureInfo> GetDiagTextureList()
+    {
+        List<DiagTextureInfo> list = new List<DiagTextureInfo>();
+        lock (_clientsLock)
+        {
+            foreach (KeyValuePair<byte, TextureEntry> kv in _textures)
+            {
+                list.Add(new DiagTextureInfo
+                {
+                    TexId = kv.Key,
+                    Width = kv.Value.Differ.TexWidth,
+                    Height = kv.Value.Differ.TexHeight
+                });
+            }
+        }
+        return list;
+    }
 
     private BandwidthMeter _rawDirtyBandwidth = new BandwidthMeter();
     private BandwidthMeter _upEncBandwidth = new BandwidthMeter();
@@ -259,7 +277,6 @@ public class StreamHost : MonoBehaviour
         if (totalClients == 0) return;
 
         int totalDirty = 0;
-        List<int> allDirtyIndices = new List<int>();
 
         lock (_clientsLock)
         {
@@ -290,6 +307,7 @@ public class StreamHost : MonoBehaviour
                 {
                     int rawBytes = 8 + fullFrame.Length;
                     _rawDirtyBandwidth.Add(rawBytes);
+                    OnDirtyTilesDetected?.Invoke(texId, null);
                     SendTiledKeyFrame(texId, texW, texH, fullFrame);
                 }
                 else if (dirtyTiles != null && dirtyTiles.Count > 0)
@@ -299,8 +317,10 @@ public class StreamHost : MonoBehaviour
                     _rawDirtyBandwidth.Add(rawBytes);
                     totalDirty += dirtyTiles.Count;
 
+                    int[] indices = new int[dirtyTiles.Count];
                     for (int i = 0; i < dirtyTiles.Count; i++)
-                        allDirtyIndices.Add(dirtyTiles[i].index);
+                        indices[i] = dirtyTiles[i].index;
+                    OnDirtyTilesDetected?.Invoke(texId, indices);
 
                     byte[] deltaPacket = FrameCodec.EncodeDeltaFrame(texId, dirtyTiles);
                     _upEncBandwidth.Add(deltaPacket.Length);
@@ -315,9 +335,6 @@ public class StreamHost : MonoBehaviour
         }
 
         DiagDirtyTiles = totalDirty;
-
-        if (allDirtyIndices.Count > 0)
-            OnDirtyTilesDetected?.Invoke(allDirtyIndices.ToArray());
 
         _rawDirtyBandwidth.Sample();
         _upEncBandwidth.Sample();

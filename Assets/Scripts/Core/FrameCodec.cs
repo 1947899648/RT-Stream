@@ -8,6 +8,13 @@ public struct DirtyTile
     public byte[] data;
 }
 
+public struct DiagTextureInfo
+{
+    public byte TexId;
+    public int Width;
+    public int Height;
+}
+
 public enum FrameType : byte
 {
     DeltaFrame = 0x00,
