@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using WPZ0325.RTStream;
@@ -28,6 +29,7 @@ public class SenderSetup : MonoBehaviour
     private string _ipInput;
     private bool _isRunning;
     private int _clientCount;
+    private HashSet<string> _registeredTexIds = new HashSet<string>();
 
     #endregion
 
@@ -59,19 +61,10 @@ public class SenderSetup : MonoBehaviour
         _streamHost.OnHostStopped += OnHostStopped;
         _streamHost.OnClientConnected += OnClientConnected;
         _streamHost.OnClientDisconnected += OnClientDisconnected;
+        _streamHost.OnRenderTextureUnregistered += OnRenderTextureUnregistered;
 
         _ipInput = "0.0.0.0";
         _portInput = "7777";
-
-        for (int i = 0; i < _drawController.EntryCount; i++)
-        {
-            string name = _drawController.GetCanvasName(i);
-            RenderTexture rt = _drawController.GetCanvasTexture(name);
-            if (rt == null) continue;
-
-            _streamHost.RegisterTexture(name, rt);
-            Debug.Log($"SenderSetup: Registered \"{name}\"");
-        }
     }
 
     void OnGUI()
@@ -107,6 +100,7 @@ public class SenderSetup : MonoBehaviour
             _streamHost.OnHostStopped -= OnHostStopped;
             _streamHost.OnClientConnected -= OnClientConnected;
             _streamHost.OnClientDisconnected -= OnClientDisconnected;
+            _streamHost.OnRenderTextureUnregistered -= OnRenderTextureUnregistered;
         }
     }
 
@@ -123,6 +117,7 @@ public class SenderSetup : MonoBehaviour
     {
         _isRunning = false;
         _clientCount = 0;
+        _registeredTexIds.Clear();
     }
 
     void OnClientConnected(int totalClients)
@@ -133,6 +128,11 @@ public class SenderSetup : MonoBehaviour
     void OnClientDisconnected(int totalClients)
     {
         _clientCount = totalClients;
+    }
+
+    void OnRenderTextureUnregistered(string texId)
+    {
+        _registeredTexIds.Remove(texId);
     }
 
     #endregion
@@ -194,15 +194,32 @@ public class SenderSetup : MonoBehaviour
     {
         if (_drawController == null) return y;
 
+        bool hostRunning = _isRunning;
+
         for (int i = 0; i < _drawController.EntryCount; i++)
         {
             string texId = _drawController.GetCanvasName(i);
             if (string.IsNullOrEmpty(texId)) continue;
 
-            bool enabled = _streamHost.IsTextureEnabled(texId);
-            bool toggled = GUI.Toggle(new Rect(_panelPad, y, _panelW - _panelPad * 2, _lineH), enabled, texId);
-            if (toggled != enabled)
-                _streamHost.SetTextureEnabled(texId, toggled);
+            bool isRegistered = _registeredTexIds.Contains(texId);
+
+            GUI.enabled = hostRunning;
+            bool toggled = GUI.Toggle(new Rect(_panelPad, y, _panelW - _panelPad * 2, _lineH), isRegistered, texId);
+            GUI.enabled = true;
+
+            if (hostRunning && toggled != isRegistered)
+            {
+                if (toggled)
+                {
+                    _streamHost.RegisterTexture(texId, _drawController.GetCanvasTexture(texId));
+                    _registeredTexIds.Add(texId);
+                }
+                else
+                {
+                    _streamHost.UnregisterTexture(texId);
+                    _registeredTexIds.Remove(texId);
+                }
+            }
             y += _lineH;
         }
 

@@ -99,6 +99,7 @@ namespace WPZ0325.RTStream
         {
             if (string.IsNullOrEmpty(texId)) throw new ArgumentException("texId cannot be null or empty", nameof(texId));
             if (rt == null) throw new ArgumentNullException(nameof(rt));
+            if (!_running) throw new InvalidOperationException("Host is not running. Call StartHost first.");
 
             lock (_clientsLock)
             {
@@ -204,6 +205,13 @@ namespace WPZ0325.RTStream
             {
                 foreach (ClientConnection c in _clients) c.Shutdown();
                 _clients.Clear();
+
+                foreach (KeyValuePair<string, TextureEntry> kv in _textures)
+                {
+                    kv.Value.Differ.Dispose();
+                    OnRenderTextureUnregistered?.Invoke(kv.Key);
+                }
+                _textures.Clear();
             }
 
             _listener = null;

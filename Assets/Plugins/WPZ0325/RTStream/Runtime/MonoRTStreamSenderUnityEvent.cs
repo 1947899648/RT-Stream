@@ -56,15 +56,84 @@ namespace WPZ0325.RTStream
             _target.OnClientDisconnected -= HandleClientDisconnected;
         }
 
-        void HandleHostStarted() { if (_debugLog) Debug.Log("[Sender] HostStarted"); OnHostStarted.Invoke(); }
-        void HandleHostStopped() { if (_debugLog) Debug.Log("[Sender] HostStopped"); OnHostStopped.Invoke(); }
-        void HandleRenderTextureRegistered(string id, int w, int h) { if (_debugLog) Debug.Log($"[Sender] RenderTextureRegistered: {id} ({w}x{h})"); OnRenderTextureRegistered.Invoke(id, w, h); }
-        void HandleRenderTextureUnregistered(string id) { if (_debugLog) Debug.Log($"[Sender] RenderTextureUnregistered: {id}"); OnRenderTextureUnregistered.Invoke(id); }
-        void HandleRenderTextureSyncStarted(string id) { if (_debugLog) Debug.Log($"[Sender] RenderTextureSyncStarted: {id}"); OnRenderTextureSyncStarted.Invoke(id); }
-        void HandleRenderTextureSyncPaused(string id) { if (_debugLog) Debug.Log($"[Sender] RenderTextureSyncPaused: {id}"); OnRenderTextureSyncPaused.Invoke(id); }
-        void HandleRenderTextureKeyFrameSent(string id) { if (_debugLog) Debug.Log($"[Sender] RenderTextureKeyFrameSent: {id}"); OnRenderTextureKeyFrameSent.Invoke(id); }
-        void HandleRenderTextureDirtyTilesSent(string id, int[] indices) { if (_debugLog) Debug.Log($"[Sender] RenderTextureDirtyTilesSent: {id} tiles={indices.Length}"); OnRenderTextureDirtyTilesSent.Invoke(id, indices); }
-        void HandleClientConnected(int c) { if (_debugLog) Debug.Log($"[Sender] ClientConnected: {c}"); OnClientConnected.Invoke(c); }
-        void HandleClientDisconnected(int c) { if (_debugLog) Debug.Log($"[Sender] ClientDisconnected: {c}"); OnClientDisconnected.Invoke(c); }
+        void HandleHostStarted()
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log("[Sender] HostStarted");
+#endif
+            OnHostStarted.Invoke();
+        }
+
+        void HandleHostStopped()
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log("[Sender] HostStopped");
+#endif
+            OnHostStopped.Invoke();
+        }
+
+        void HandleRenderTextureRegistered(string id, int w, int h)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Sender] RenderTextureRegistered: {id} ({w}x{h})");
+#endif
+            OnRenderTextureRegistered.Invoke(id, w, h);
+        }
+
+        void HandleRenderTextureUnregistered(string id)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Sender] RenderTextureUnregistered: {id}");
+#endif
+            OnRenderTextureUnregistered.Invoke(id);
+        }
+
+        void HandleRenderTextureSyncStarted(string id)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Sender] RenderTextureSyncStarted: {id}");
+#endif
+            OnRenderTextureSyncStarted.Invoke(id);
+        }
+
+        void HandleRenderTextureSyncPaused(string id)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Sender] RenderTextureSyncPaused: {id}");
+#endif
+            OnRenderTextureSyncPaused.Invoke(id);
+        }
+
+        void HandleRenderTextureKeyFrameSent(string id)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Sender] RenderTextureKeyFrameSent: {id}");
+#endif
+            OnRenderTextureKeyFrameSent.Invoke(id);
+        }
+
+        void HandleRenderTextureDirtyTilesSent(string id, int[] indices)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Sender] RenderTextureDirtyTilesSent: {id} tiles={indices.Length}");
+#endif
+            OnRenderTextureDirtyTilesSent.Invoke(id, indices);
+        }
+
+        void HandleClientConnected(int c)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Sender] ClientConnected: {c}");
+#endif
+            OnClientConnected.Invoke(c);
+        }
+
+        void HandleClientDisconnected(int c)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Sender] ClientDisconnected: {c}");
+#endif
+            OnClientDisconnected.Invoke(c);
+        }
     }
 }

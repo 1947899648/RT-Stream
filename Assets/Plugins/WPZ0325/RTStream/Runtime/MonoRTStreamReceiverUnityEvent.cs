@@ -41,11 +41,52 @@ namespace WPZ0325.RTStream
             _target.OnRenderTextureDirtyTilesReceived -= HandleRenderTextureDirtyTilesReceived;
         }
 
-        void HandleConnectedToHost() { if (_debugLog) Debug.Log("[Receiver] ConnectedToHost"); OnConnectedToHost.Invoke(); }
-        void HandleDisconnectedFromHost() { if (_debugLog) Debug.Log("[Receiver] DisconnectedFromHost"); OnDisconnectedFromHost.Invoke(); }
-        void HandleConnectionFailed(string msg) { if (_debugLog) Debug.Log($"[Receiver] ConnectionFailed: {msg}"); OnConnectionFailed.Invoke(msg); }
-        void HandleRenderTextureSubscribed(string id, int w, int h) { if (_debugLog) Debug.Log($"[Receiver] RenderTextureSubscribed: {id} ({w}x{h})"); OnRenderTextureSubscribed.Invoke(id, w, h); }
-        void HandleRenderTextureUnsubscribed(string id) { if (_debugLog) Debug.Log($"[Receiver] RenderTextureUnsubscribed: {id}"); OnRenderTextureUnsubscribed.Invoke(id); }
-        void HandleRenderTextureDirtyTilesReceived(string id, int[] indices) { if (_debugLog) Debug.Log($"[Receiver] RenderTextureDirtyTilesReceived: {id} tiles={indices.Length}"); OnRenderTextureDirtyTilesReceived.Invoke(id, indices); }
+        void HandleConnectedToHost()
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log("[Receiver] ConnectedToHost");
+#endif
+            OnConnectedToHost.Invoke();
+        }
+
+        void HandleDisconnectedFromHost()
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log("[Receiver] DisconnectedFromHost");
+#endif
+            OnDisconnectedFromHost.Invoke();
+        }
+
+        void HandleConnectionFailed(string msg)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Receiver] ConnectionFailed: {msg}");
+#endif
+            OnConnectionFailed.Invoke(msg);
+        }
+
+        void HandleRenderTextureSubscribed(string id, int w, int h)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Receiver] RenderTextureSubscribed: {id} ({w}x{h})");
+#endif
+            OnRenderTextureSubscribed.Invoke(id, w, h);
+        }
+
+        void HandleRenderTextureUnsubscribed(string id)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Receiver] RenderTextureUnsubscribed: {id}");
+#endif
+            OnRenderTextureUnsubscribed.Invoke(id);
+        }
+
+        void HandleRenderTextureDirtyTilesReceived(string id, int[] indices)
+        {
+#if UNITY_EDITOR
+            if (_debugLog) Debug.Log($"[Receiver] RenderTextureDirtyTilesReceived: {id} tiles={indices.Length}");
+#endif
+            OnRenderTextureDirtyTilesReceived.Invoke(id, indices);
+        }
     }
 }
