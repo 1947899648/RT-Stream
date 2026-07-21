@@ -225,11 +225,11 @@ sequenceDiagram
 
 ```mermaid
 graph TD
-    A[原始帧数据] --> B{数据块 &lt; 4 bytes?}
+    A[原始帧数据] --> B{数据块 < 4 bytes?}
     B -->|是| C[跳过压缩, 直接复制]
     B -->|否| D[LZ4 压缩]
     C --> E[4字节长度头 + 原始数据]
-    D --> F{压缩后 &lt; 原始?}
+    D --> F{压缩后 < 原始?}
     F -->|是| G[4字节长度头 + 压缩数据]
     F -->|否| E
     G --> H[帧头 CompressFlag = 1]
@@ -733,10 +733,10 @@ sequenceDiagram
         Main->>Meter: Sample()
         alt 首次调用
             Meter->>Meter: 记录时间戳, 不计算
-        else 间隔 &ge; 1s
+        else 间隔 >= 1s
             Meter->>Meter: Interlocked.Exchange 取出字节数
             Meter->>Meter: MBps = bytes / elapsed / 1024 / 1024
-        else 间隔 &lt; 1s
+        else 间隔 < 1s
             Meter->>Meter: 跳过, 保持上次值
         end
     end
@@ -849,35 +849,37 @@ public class DirtyTilesUnityEvent : UnityEvent<string, int[]> { }
 
 ### 7.2 帧格式
 
-```mermaid
-block-beta
+**DeltaFrame (0x00) — 增量帧 / 关键帧**
 
-    block DeltaFrame :3
-        columns 1
-        Type[类型: 0x00]
-        space
-        Header["Flags[15bit瓦片数 | 1bit压缩] | PayloadLen(4B) | Timestamp(8B)"]
-        space
-        Payload["idLen(1B) | texId(idLen B) | T1_idx(4B) | T1_data(tileBytes B) | T2_idx(4B) | T2_data..."]
-    end
+```
+┌──────┬───────────────────┬───────────┬──────────────┬────────────────────────────┐
+│ 0x00 │ Flags (2B)        │ PayloadLen│ Timestamp    │ Load                       │
+│ (1B) │ bit15=压缩 bit0~14│ (4B)      │ (8B, UTC Ticks)│                           │
+│      │ =瓦片数            │           │              │                           │
+├──────┴───────────────────┴───────────┴──────────────┤                           │
+│                   Header (15B)                      │  idLen(1B)                │
+│                                                    │  texId(idLen B)           │
+│                                                    │  T1_idx(4B) | T1_data     │
+│                                                    │  T2_idx(4B) | T2_data ... │
+└────────────────────────────────────────────────────┴───────────────────────────┘
+```
 
-    block TextureAnnounce :3
-        columns 1
-        Type2[类型: 0x01]
-        space
-        Header2["Flags=0 | PayloadLen(4B) | Timestamp(8B)"]
-        space
-        Payload2["idLen(1B) | texId(idLen B) | Width(2B) | Height(2B)"]
-    end
+**TextureAnnounce (0x01) — 纹理公告帧**
 
-    block SubscribeReq :3
-        columns 1
-        Type3[类型: 0x02]
-        space
-        Header3[无标准头部, 仅有帧类型]
-        space
-        Payload3["count(1B) | len1(1B) | texId1 | len2(1B) | texId2 | ..."]
-    end
+```
+┌──────┬────────────┬───────────┬────────────────┬──────────────────────────┐
+│ 0x01 │ 0x0000     │ PayloadLen│ Timestamp      │ idLen(1B) | texId        │
+│ (1B) │ (2B)       │ (4B)      │ (8B, UTC Ticks)│ Width(2B) | Height(2B)   │
+└──────┴────────────┴───────────┴────────────────┴──────────────────────────┘
+```
+
+**SubscribeReq (0x02) — 订阅请求帧**
+
+```
+┌──────┬───────┬──────┬──────────┬──────┬──────────┬─────┐
+│ 0x02 │ count │ len1 │ texId1   │ len2 │ texId2   │ ... │
+│ (1B) │ (1B)  │ (1B) │ (len1 B) │ (1B) │ (len2 B) │     │
+└──────┴───────┴──────┴──────────┴──────┴──────────┴─────┘
 ```
 
 ### 7.3 握手流程
