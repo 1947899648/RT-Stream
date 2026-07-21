@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7317971552232854215}
   - component: {fileID: 7317971552232854214}
+  - component: {fileID: 2882021111412511716}
   m_Layer: 0
   m_Name: MonoRTStreamSender
   m_TagString: Untagged
@@ -45,3 +46,46 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _tileDiffShader: {fileID: 7200000, guid: bc7398732741ec4419851da7a823fa57, type: 3}
+--- !u!114 &2882021111412511716
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7317971552232854213}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _debugLog: 1
+  OnHostStarted:
+    m_PersistentCalls:
+      m_Calls: []
+  OnHostStopped:
+    m_PersistentCalls:
+      m_Calls: []
+  OnRenderTextureRegistered:
+    m_PersistentCalls:
+      m_Calls: []
+  OnRenderTextureUnregistered:
+    m_PersistentCalls:
+      m_Calls: []
+  OnRenderTextureSyncStarted:
+    m_PersistentCalls:
+      m_Calls: []
+  OnRenderTextureSyncPaused:
+    m_PersistentCalls:
+      m_Calls: []
+  OnRenderTextureKeyFrameSent:
+    m_PersistentCalls:
+      m_Calls: []
+  OnRenderTextureDirtyTilesSent:
+    m_PersistentCalls:
+      m_Calls: []
+  OnClientConnected:
+    m_PersistentCalls:
+      m_Calls: []
+  OnClientDisconnected:
+    m_PersistentCalls:
+      m_Calls: []
