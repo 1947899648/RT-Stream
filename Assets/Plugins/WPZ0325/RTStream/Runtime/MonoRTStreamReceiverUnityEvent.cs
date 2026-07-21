@@ -11,8 +11,8 @@ namespace WPZ0325.RTStream
         public UnityEvent OnConnectedToHost = new UnityEvent();
         public UnityEvent OnDisconnectedFromHost = new UnityEvent();
         public UnityEvent<string> OnConnectionFailed = new UnityEvent<string>();
-        public UnityEvent<string, int, int> OnRenderTextureSubscribed = new UnityEvent<string, int, int>();
-        public UnityEvent<string> OnRenderTextureUnsubscribed = new UnityEvent<string>();
+        public UnityEvent<string, int, int> OnRenderTextureAnnounced = new UnityEvent<string, int, int>();
+
         public DirtyTilesUnityEvent OnRenderTextureDirtyTilesReceived = new DirtyTilesUnityEvent();
 
         private MonoRTStreamReceiver _target;
@@ -24,8 +24,7 @@ namespace WPZ0325.RTStream
             _target.OnConnectedToHost += HandleConnectedToHost;
             _target.OnDisconnectedFromHost += HandleDisconnectedFromHost;
             _target.OnConnectionFailed += HandleConnectionFailed;
-            _target.OnRenderTextureSubscribed += HandleRenderTextureSubscribed;
-            _target.OnRenderTextureUnsubscribed += HandleRenderTextureUnsubscribed;
+            _target.OnRenderTextureAnnounced += HandleRenderTextureAnnounced;
             _target.OnRenderTextureDirtyTilesReceived += HandleRenderTextureDirtyTilesReceived;
         }
 
@@ -36,8 +35,7 @@ namespace WPZ0325.RTStream
             _target.OnConnectedToHost -= HandleConnectedToHost;
             _target.OnDisconnectedFromHost -= HandleDisconnectedFromHost;
             _target.OnConnectionFailed -= HandleConnectionFailed;
-            _target.OnRenderTextureSubscribed -= HandleRenderTextureSubscribed;
-            _target.OnRenderTextureUnsubscribed -= HandleRenderTextureUnsubscribed;
+            _target.OnRenderTextureAnnounced -= HandleRenderTextureAnnounced;
             _target.OnRenderTextureDirtyTilesReceived -= HandleRenderTextureDirtyTilesReceived;
         }
 
@@ -65,20 +63,12 @@ namespace WPZ0325.RTStream
             OnConnectionFailed.Invoke(msg);
         }
 
-        void HandleRenderTextureSubscribed(string id, int w, int h)
+        void HandleRenderTextureAnnounced(string id, int w, int h)
         {
 #if UNITY_EDITOR
-            if (_debugLog) Debug.Log($"[Receiver] RenderTextureSubscribed: {id} ({w}x{h})");
+            if (_debugLog) Debug.Log($"[Receiver] RenderTextureAnnounced: {id} ({w}x{h})");
 #endif
-            OnRenderTextureSubscribed.Invoke(id, w, h);
-        }
-
-        void HandleRenderTextureUnsubscribed(string id)
-        {
-#if UNITY_EDITOR
-            if (_debugLog) Debug.Log($"[Receiver] RenderTextureUnsubscribed: {id}");
-#endif
-            OnRenderTextureUnsubscribed.Invoke(id);
+            OnRenderTextureAnnounced.Invoke(id, w, h);
         }
 
         void HandleRenderTextureDirtyTilesReceived(string id, int[] indices)

@@ -98,7 +98,7 @@ public class DiagnosticPanel : MonoBehaviour
         if (_client != null)
         {
             _client.OnRenderTextureDirtyTilesReceived -= OnDirtyTile;
-            _client.OnRenderTextureSubscribed -= OnRenderTextureSubscribed;
+            _client.OnRenderTextureAnnounced -= OnRenderTextureAnnounced;
         }
 
         foreach (Texture2D tex in _gridTexs.Values)
@@ -132,7 +132,7 @@ public class DiagnosticPanel : MonoBehaviour
         if (_client != null)
         {
             _client.OnRenderTextureDirtyTilesReceived += OnDirtyTile;
-            _client.OnRenderTextureSubscribed += OnRenderTextureSubscribed;
+            _client.OnRenderTextureAnnounced += OnRenderTextureAnnounced;
         }
     }
 
@@ -160,7 +160,7 @@ public class DiagnosticPanel : MonoBehaviour
             _activeTexSubTab = Mathf.Max(0, _texList.Count - 1);
     }
 
-    void OnRenderTextureSubscribed(string texId, int width, int height)
+    void OnRenderTextureAnnounced(string texId, int width, int height)
     {
         for (int i = 0; i < _texList.Count; i++)
         {

@@ -197,6 +197,7 @@ namespace WPZ0325.RTStream
         /// <summary>停止 TCP 监听服务并断开所有客户端</summary>
         public void StopHost()
         {
+            bool wasRunning = _running;
             _running = false;
             _listener?.Stop();
             _acceptThread?.Join(1000);
@@ -218,7 +219,8 @@ namespace WPZ0325.RTStream
             _acceptThread = null;
 
             Debug.Log("MonoRTStreamSender: Stopped");
-            OnHostStopped?.Invoke();
+            if (wasRunning)
+                OnHostStopped?.Invoke();
         }
 
         /// <summary>获取所有客户端的诊断信息字符串（队列深度等）</summary>
@@ -389,6 +391,16 @@ namespace WPZ0325.RTStream
                 return SubscribedIds == null || SubscribedIds.Contains(texId);
             }
 
+            public bool IsConnected()
+            {
+                try
+                {
+                    Socket sock = _client.Client;
+                    return !sock.Poll(0, SelectMode.SelectRead) || sock.Available > 0;
+                }
+                catch { return false; }
+            }
+
             public void Enqueue(byte[] packet)
             {
                 lock (_lock)
@@ -398,6 +410,16 @@ namespace WPZ0325.RTStream
                 }
             }
 
+            private bool _isSocketAlive()
+            {
+                try
+                {
+                    Socket sock = _client.Client;
+                    return !sock.Poll(0, SelectMode.SelectRead) || sock.Available > 0;
+                }
+                catch { return false; }
+            }
+
             private void SendLoop()
             {
                 try
@@ -405,13 +427,24 @@ namespace WPZ0325.RTStream
                     NetworkStream stream = _client.GetStream();
                     while (Alive)
                     {
+                        try
+                        {
+                            if (!_isSocketAlive()) { Alive = false; return; }
+                        }
+                        catch { Alive = false; return; }
+
                         byte[] packet;
                         lock (_lock)
                         {
                             while (_queue.Count == 0)
                             {
                                 if (!Alive) return;
-                                Monitor.Wait(_lock);
+                                Monitor.Wait(_lock, 1000);
+                                try
+                                {
+                                    if (!_isSocketAlive()) { Alive = false; return; }
+                                }
+                                catch { Alive = false; return; }
                             }
                             packet = _queue.Dequeue();
                         }
@@ -424,6 +457,11 @@ namespace WPZ0325.RTStream
                         stream.Write(_lenBuf, 0, 4);
                         stream.Write(packet, 0, len);
                         _sendMeter.Add(4 + len);
+                        try
+                        {
+                            if (!_isSocketAlive()) { Alive = false; return; }
+                        }
+                        catch { Alive = false; return; }
                     }
                 }
                 catch { }
@@ -525,7 +563,7 @@ namespace WPZ0325.RTStream
             int removed = 0;
             for (int i = _clients.Count - 1; i >= 0; i--)
             {
-                if (_clients[i].Alive) continue;
+                if (_clients[i].Alive && _clients[i].IsConnected()) continue;
                 _clients[i].Shutdown();
                 _clients.RemoveAt(i);
                 removed++;
@@ -547,6 +585,11 @@ namespace WPZ0325.RTStream
                     client.NoDelay = true;
 
                     HashSet<string> subscribedIds = ReadHandshake(client);
+                    if (subscribedIds == null)
+                    {
+                        try { client.Close(); } catch { }
+                        continue;
+                    }
 
                     ClientConnection conn = new ClientConnection(client, _upSendBandwidth, subscribedIds);
 

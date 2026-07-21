@@ -76,7 +76,7 @@ public class ReceiverSetup : MonoBehaviour
             }
         }
 
-        _streamClient.OnRenderTextureSubscribed += OnRenderTextureSubscribed;
+        _streamClient.OnRenderTextureAnnounced += OnRenderTextureAnnounced;
 
         _ipInput = "127.0.0.1";
         _portInput = "7777";
@@ -129,7 +129,7 @@ public class ReceiverSetup : MonoBehaviour
     void OnDestroy()
     {
         if (_streamClient != null)
-            _streamClient.OnRenderTextureSubscribed -= OnRenderTextureSubscribed;
+            _streamClient.OnRenderTextureAnnounced -= OnRenderTextureAnnounced;
 
         ReleaseAllRTs();
     }
@@ -278,7 +278,7 @@ public class ReceiverSetup : MonoBehaviour
 
     #region 事件处理
 
-    void OnRenderTextureSubscribed(string texId, int w, int h)
+    void OnRenderTextureAnnounced(string texId, int w, int h)
     {
         Debug.Log($"ReceiverSetup: TextureAnnounce texId={texId} ({w}x{h})");
 

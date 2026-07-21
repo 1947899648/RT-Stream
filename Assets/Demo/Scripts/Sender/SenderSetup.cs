@@ -30,6 +30,7 @@ public class SenderSetup : MonoBehaviour
     private bool _isRunning;
     private int _clientCount;
     private HashSet<string> _registeredTexIds = new HashSet<string>();
+    private HashSet<string> _pausedTexIds = new HashSet<string>();
 
     #endregion
 
@@ -118,6 +119,7 @@ public class SenderSetup : MonoBehaviour
         _isRunning = false;
         _clientCount = 0;
         _registeredTexIds.Clear();
+        _pausedTexIds.Clear();
     }
 
     void OnClientConnected(int totalClients)
@@ -133,6 +135,7 @@ public class SenderSetup : MonoBehaviour
     void OnRenderTextureUnregistered(string texId)
     {
         _registeredTexIds.Remove(texId);
+        _pausedTexIds.Remove(texId);
     }
 
     #endregion
@@ -202,9 +205,13 @@ public class SenderSetup : MonoBehaviour
             if (string.IsNullOrEmpty(texId)) continue;
 
             bool isRegistered = _registeredTexIds.Contains(texId);
+            bool isPaused = _pausedTexIds.Contains(texId);
+
+            float toggleW = _panelW - _panelPad * 2 - 50f;
+            string label = isPaused ? texId + " (已暂停)" : texId;
 
             GUI.enabled = hostRunning;
-            bool toggled = GUI.Toggle(new Rect(_panelPad, y, _panelW - _panelPad * 2, _lineH), isRegistered, texId);
+            bool toggled = GUI.Toggle(new Rect(_panelPad, y, toggleW, _lineH), isRegistered, label);
             GUI.enabled = true;
 
             if (hostRunning && toggled != isRegistered)
@@ -218,8 +225,26 @@ public class SenderSetup : MonoBehaviour
                 {
                     _streamHost.UnregisterTexture(texId);
                     _registeredTexIds.Remove(texId);
+                    _pausedTexIds.Remove(texId);
                 }
             }
+
+            if (isRegistered)
+            {
+                GUI.enabled = hostRunning;
+                string btnText = isPaused ? "恢复" : "暂停";
+                if (GUI.Button(new Rect(_panelPad + toggleW + 2f, y, 48f, _lineH), btnText))
+                {
+                    bool enable = isPaused;
+                    _streamHost.SetTextureEnabled(texId, enable);
+                    if (enable)
+                        _pausedTexIds.Remove(texId);
+                    else
+                        _pausedTexIds.Add(texId);
+                }
+                GUI.enabled = true;
+            }
+
             y += _lineH;
         }
 

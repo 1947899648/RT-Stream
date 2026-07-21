@@ -56,10 +56,9 @@ namespace WPZ0325.RTStream
         public event System.Action OnDisconnectedFromHost;
         /// <summary>连接 Host 失败时触发</summary>
         public event System.Action<string> OnConnectionFailed;
-        /// <summary>收到纹理公告帧（订阅纹理成功）时触发</summary>
-        public event System.Action<string, int, int> OnRenderTextureSubscribed;
-        /// <summary>取消订阅纹理时触发（收到 TextureRemove 帧）</summary>
-        public event System.Action<string> OnRenderTextureUnsubscribed;
+        /// <summary>收到纹理公告帧时触发</summary>
+        public event System.Action<string, int, int> OnRenderTextureAnnounced;
+
         /// <summary>纹理脏瓦片数据接收并应用到输出 RT 时触发</summary>
         public event System.Action<string, int[]> OnRenderTextureDirtyTilesReceived;
 
@@ -116,7 +115,6 @@ namespace WPZ0325.RTStream
             _batch.Clear();
             ReleasePayloadBuffer();
             _meta.Clear();
-            OnDisconnectedFromHost?.Invoke();
         }
 
         /// <summary>将指定纹理绑定到输出 RenderTexture</summary>
@@ -261,7 +259,7 @@ namespace WPZ0325.RTStream
 
             _meta[texId] = new TextureMeta { Width = texW, Height = texH };
             Debug.Log($"MonoRTStreamReceiver: TextureAnnounce texId=\"{texId}\" ({texW}x{texH})");
-            OnRenderTextureSubscribed?.Invoke(texId, texW, texH);
+            OnRenderTextureAnnounced?.Invoke(texId, texW, texH);
         }
 
         #endregion
