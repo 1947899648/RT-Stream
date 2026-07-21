@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using WPZ0325.RTStream;
@@ -25,7 +24,6 @@ public class SenderSetup : MonoBehaviour
 
     #region 私有状态
 
-    private Dictionary<string, byte> _nameToTexId = new Dictionary<string, byte>();
     private string _portInput;
     private string _ipInput;
 
@@ -64,9 +62,8 @@ public class SenderSetup : MonoBehaviour
             RenderTexture rt = _drawController.GetCanvasTexture(name);
             if (rt == null) continue;
 
-            byte texId = _streamHost.RegisterTexture(rt);
-            _nameToTexId[name] = texId;
-            Debug.Log($"SenderSetup: Registered \"{name}\" → texId={texId}");
+            _streamHost.RegisterTexture(name, rt);
+            Debug.Log($"SenderSetup: Registered \"{name}\"");
         }
     }
 

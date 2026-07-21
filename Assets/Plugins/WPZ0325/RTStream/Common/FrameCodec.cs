@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace WPZ0325.RTStream
 {
@@ -19,8 +20,8 @@ namespace WPZ0325.RTStream
     /// </summary>
     public struct DiagTextureInfo
     {
-        /// <summary>纹理标识 ID</summary>
-        public byte TexId;
+        /// <summary>纹理标识名称</summary>
+        public string TexId;
         /// <summary>纹理宽度（像素）</summary>
         public int Width;
         /// <summary>纹理高度（像素）</summary>
@@ -52,10 +53,7 @@ namespace WPZ0325.RTStream
         public const int TileSize = 64;
         /// <summary>协议帧头部字节数</summary>
         public const int HeaderSize = 15;
-        /// <summary>帧数据中瓦片负载的起始偏移</summary>
-        public const int TilePayloadOffset = 16;
 
-        // 帧标志位：最高位（0x8000）为 1 表示负载已 LZ4 压缩
         private const ushort CompressFlag = 0x8000;
 
         #endregion
@@ -74,11 +72,18 @@ namespace WPZ0325.RTStream
         /// <summary>
         /// 计算单个瓦片的字节数（TileSize×TileSize×4）。
         /// </summary>
-        /// <returns>单个瓦片的 RGBA 字节数</returns>
         public static int GetBytesPerTile()
         {
             int tileSize = TileSize;
             return tileSize * tileSize * 4;
+        }
+
+        /// <summary>
+        /// 获取帧数据中瓦片负载的起始偏移（动态，取决于 texId 长度）。
+        /// </summary>
+        public static int GetTilePayloadOffset(byte[] packet)
+        {
+            return HeaderSize + 1 + packet[HeaderSize];
         }
 
         #endregion
@@ -88,19 +93,23 @@ namespace WPZ0325.RTStream
         /// <summary>
         /// 编码增量帧。将脏瓦片列表序列化为帧数据，并可选压缩。
         /// </summary>
-        /// <param name="texId">纹理 ID</param>
+        /// <param name="texId">纹理标识名称</param>
         /// <param name="tiles">脏瓦片列表</param>
         /// <returns>完整的增量帧数据包</returns>
-        public static byte[] EncodeDeltaFrame(byte texId, List<DirtyTile> tiles)
+        public static byte[] EncodeDeltaFrame(string texId, List<DirtyTile> tiles)
         {
+            byte[] texIdBytes = Encoding.UTF8.GetBytes(texId);
+            int texIdLen = texIdBytes.Length;
+
             int tileBytes = GetBytesPerTile();
             int totalTicketPayload = tiles.Count * (4 + tileBytes);
-            int payloadLen = 1 + totalTicketPayload;
+            int payloadLen = 1 + texIdLen + totalTicketPayload;
             byte[] payload = new byte[payloadLen];
 
-            // 负载首字节为纹理 ID，随后按 [索引(4B) + 数据(tileBytes)] 重复
-            payload[0] = texId;
-            int pos = 1;
+            payload[0] = (byte)texIdLen;
+            Buffer.BlockCopy(texIdBytes, 0, payload, 1, texIdLen);
+
+            int pos = 1 + texIdLen;
             foreach (DirtyTile tile in tiles)
             {
                 BitConverter.GetBytes(tile.index).CopyTo(payload, pos);
@@ -109,7 +118,6 @@ namespace WPZ0325.RTStream
             }
 
             byte[] compressed = LZ4.Wrap(payload, out int origSize, out int comprSize);
-            // 仅当压缩后体积更小时才使用压缩版本
             bool useCompressed = compressed.Length < payloadLen;
 
             if (useCompressed)
@@ -121,7 +129,6 @@ namespace WPZ0325.RTStream
             int finalPayloadLen = useCompressed ? compressed.Length : payloadLen;
             byte[] packet = new byte[HeaderSize + finalPayloadLen];
 
-            // 填充协议头
             packet[0] = (byte)FrameType.DeltaFrame;
             ushort flags = (ushort)tiles.Count;
             if (useCompressed) flags |= CompressFlag;
@@ -138,25 +145,24 @@ namespace WPZ0325.RTStream
         }
 
         /// <summary>
-        /// 编码纹理公告帧。通知接收端新纹理的 ID 和尺寸。
+        /// 编码纹理公告帧。通知接收端新纹理的名称和尺寸。
         /// </summary>
-        /// <param name="texId">纹理 ID</param>
-        /// <param name="texWidth">纹理宽度（像素）</param>
-        /// <param name="texHeight">纹理高度（像素）</param>
-        /// <returns>完整的纹理公告帧数据包</returns>
-        public static byte[] EncodeTextureAnnounce(byte texId, ushort texWidth, ushort texHeight)
+        public static byte[] EncodeTextureAnnounce(string texId, ushort texWidth, ushort texHeight)
         {
-            byte[] packet = new byte[HeaderSize + 5];
+            byte[] texIdBytes = Encoding.UTF8.GetBytes(texId);
+            int texIdLen = texIdBytes.Length;
+            int payloadLen = 1 + texIdLen + 4;
+            byte[] packet = new byte[HeaderSize + payloadLen];
 
             packet[0] = (byte)FrameType.TextureAnnounce;
             BitConverter.GetBytes((ushort)0).CopyTo(packet, 1);
-            BitConverter.GetBytes((uint)5).CopyTo(packet, 3);
+            BitConverter.GetBytes((uint)payloadLen).CopyTo(packet, 3);
             BitConverter.GetBytes(DateTime.UtcNow.Ticks).CopyTo(packet, 7);
 
-            // 负载：texId(1B) + width(2B) + height(2B) = 5 字节
-            packet[HeaderSize] = texId;
-            BitConverter.GetBytes(texWidth).CopyTo(packet, HeaderSize + 1);
-            BitConverter.GetBytes(texHeight).CopyTo(packet, HeaderSize + 3);
+            packet[HeaderSize] = (byte)texIdLen;
+            Buffer.BlockCopy(texIdBytes, 0, packet, HeaderSize + 1, texIdLen);
+            BitConverter.GetBytes(texWidth).CopyTo(packet, HeaderSize + 1 + texIdLen);
+            BitConverter.GetBytes(texHeight).CopyTo(packet, HeaderSize + 1 + texIdLen + 2);
 
             return packet;
         }
@@ -164,18 +170,34 @@ namespace WPZ0325.RTStream
         /// <summary>
         /// 编码订阅请求帧。客户端用于告知发送端需要哪些纹理。
         /// </summary>
-        /// <param name="texIds">需要订阅的纹理 ID 数组，null 表示订阅全部</param>
-        /// <returns>订阅请求帧数据包</returns>
-        public static byte[] EncodeSubscribeReq(byte[] texIds)
+        /// <param name="texIds">需要订阅的纹理标识数组，null 表示订阅全部</param>
+        public static byte[] EncodeSubscribeReq(string[] texIds)
         {
             int count = texIds != null ? texIds.Length : 0;
-            byte[] packet = new byte[2 + count];
+            int totalBytes = 0;
+            byte[][] idBytes = null;
 
-            // 格式：FrameType(1B) + Count(1B) + texIds...
+            if (count > 0)
+            {
+                idBytes = new byte[count][];
+                for (int i = 0; i < count; i++)
+                {
+                    idBytes[i] = Encoding.UTF8.GetBytes(texIds[i]);
+                    totalBytes += 1 + idBytes[i].Length;
+                }
+            }
+
+            byte[] packet = new byte[2 + totalBytes];
+
             packet[0] = (byte)FrameType.SubscribeReq;
             packet[1] = (byte)count;
-            if (count > 0)
-                Buffer.BlockCopy(texIds, 0, packet, 2, count);
+            int pos = 2;
+            for (int i = 0; i < count; i++)
+            {
+                packet[pos] = (byte)idBytes[i].Length;
+                Buffer.BlockCopy(idBytes[i], 0, packet, pos + 1, idBytes[i].Length);
+                pos += 1 + idBytes[i].Length;
+            }
 
             return packet;
         }
@@ -185,20 +207,17 @@ namespace WPZ0325.RTStream
         #region 帧解析
 
         /// <summary>
-        /// 从数据包中读取纹理 ID。
+        /// 从数据包中读取纹理标识。
         /// </summary>
-        /// <param name="packet">完整的帧数据包（含 HeaderSize 头部）</param>
-        /// <returns>纹理 ID</returns>
-        public static byte GetTexId(byte[] packet)
+        public static string GetTexId(byte[] packet)
         {
-            return packet[HeaderSize];
+            int len = packet[HeaderSize];
+            return Encoding.UTF8.GetString(packet, HeaderSize + 1, len);
         }
 
         /// <summary>
         /// 从数据包中读取瓦片数量（不含压缩标志位）。
         /// </summary>
-        /// <param name="packet">完整的帧数据包</param>
-        /// <returns>瓦片数量</returns>
         public static ushort GetTileCount(byte[] packet)
         {
             return (ushort)(BitConverter.ToUInt16(packet, 1) & 0x7FFF);
@@ -207,8 +226,6 @@ namespace WPZ0325.RTStream
         /// <summary>
         /// 从数据包中读取时间戳（发送端 UTC Ticks）。
         /// </summary>
-        /// <param name="packet">完整的帧数据包</param>
-        /// <returns>时间戳（Ticks）</returns>
         public static long GetTimestamp(byte[] packet)
         {
             return BitConverter.ToInt64(packet, 7);
@@ -217,8 +234,6 @@ namespace WPZ0325.RTStream
         /// <summary>
         /// 判断数据包的负载是否经过 LZ4 压缩。
         /// </summary>
-        /// <param name="packet">完整的帧数据包</param>
-        /// <returns>true 表示负载已压缩</returns>
         public static bool IsCompressed(byte[] packet)
         {
             return (BitConverter.ToUInt16(packet, 1) & CompressFlag) != 0;
@@ -227,33 +242,28 @@ namespace WPZ0325.RTStream
         /// <summary>
         /// 尝试解析纹理公告帧。
         /// </summary>
-        /// <param name="packet">帧数据包</param>
-        /// <param name="texId">输出：纹理 ID</param>
-        /// <param name="texWidth">输出：纹理宽度</param>
-        /// <param name="texHeight">输出：纹理高度</param>
-        /// <returns>解析成功返回 true，否则 false</returns>
-        public static bool TryParseTextureAnnounce(byte[] packet, out byte texId, out ushort texWidth, out ushort texHeight)
+        public static bool TryParseTextureAnnounce(byte[] packet, out string texId, out ushort texWidth, out ushort texHeight)
         {
-            texId = 0;
+            texId = null;
             texWidth = 0;
             texHeight = 0;
 
-            if (packet.Length < HeaderSize + 5) return false;
+            if (packet.Length < HeaderSize + 1) return false;
             if (packet[0] != (byte)FrameType.TextureAnnounce) return false;
 
-            texId = packet[HeaderSize];
-            texWidth = BitConverter.ToUInt16(packet, HeaderSize + 1);
-            texHeight = BitConverter.ToUInt16(packet, HeaderSize + 3);
+            int idLen = packet[HeaderSize];
+            if (packet.Length < HeaderSize + 1 + idLen + 4) return false;
+
+            texId = Encoding.UTF8.GetString(packet, HeaderSize + 1, idLen);
+            texWidth = BitConverter.ToUInt16(packet, HeaderSize + 1 + idLen);
+            texHeight = BitConverter.ToUInt16(packet, HeaderSize + 1 + idLen + 2);
             return true;
         }
 
         /// <summary>
         /// 尝试解析订阅请求帧。
         /// </summary>
-        /// <param name="data">帧数据</param>
-        /// <param name="texIds">输出：订阅的纹理 ID 数组，null 表示订阅全部</param>
-        /// <returns>解析成功返回 true，否则 false</returns>
-        public static bool TryParseSubscribeReq(byte[] data, out byte[] texIds)
+        public static bool TryParseSubscribeReq(byte[] data, out string[] texIds)
         {
             texIds = null;
 
@@ -261,16 +271,22 @@ namespace WPZ0325.RTStream
             if (data[0] != (byte)FrameType.SubscribeReq) return false;
 
             int count = data[1];
-            // count 为 0 表示订阅所有纹理
             if (count == 0)
             {
                 texIds = null;
                 return true;
             }
 
-            if (data.Length < 2 + count) return false;
-            texIds = new byte[count];
-            Buffer.BlockCopy(data, 2, texIds, 0, count);
+            texIds = new string[count];
+            int pos = 2;
+            for (int i = 0; i < count; i++)
+            {
+                if (data.Length < pos + 1) return false;
+                int idLen = data[pos++];
+                if (data.Length < pos + idLen) return false;
+                texIds[i] = Encoding.UTF8.GetString(data, pos, idLen);
+                pos += idLen;
+            }
             return true;
         }
 

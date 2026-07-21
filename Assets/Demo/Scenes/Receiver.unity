@@ -361,12 +361,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _streamClient: {fileID: 249526265}
-  _cubeRenderer: {fileID: 519418909}
-  _displayImage: {fileID: 1955702333}
+  _bindings:
+  - texId: ImageA
+    meshTarget: {fileID: 519418909}
+    uiTarget: {fileID: 0}
+  - texId: ImageB
+    meshTarget: {fileID: 0}
+    uiTarget: {fileID: 1955702333}
   _rotateTarget: {fileID: 519418911}
   _rotateSpeed: 90
-  _subscribeTexA: 1
-  _subscribeTexB: 1
   _startLocal: 1
   _localSimInterval: 0.3
 --- !u!4 &810359577

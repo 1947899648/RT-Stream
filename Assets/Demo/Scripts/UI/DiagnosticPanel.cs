@@ -46,9 +46,9 @@ public class DiagnosticPanel : MonoBehaviour
         public int TilesX, TilesY, MapH;
         public float TilePxF;
     }
-    private Dictionary<byte, Dictionary<int, float>> _dirtyPerTex = new Dictionary<byte, Dictionary<int, float>>();
-    private Dictionary<byte, Texture2D> _gridTexs = new Dictionary<byte, Texture2D>();
-    private Dictionary<byte, GridDim> _gridDims = new Dictionary<byte, GridDim>();
+    private Dictionary<string, Dictionary<int, float>> _dirtyPerTex = new Dictionary<string, Dictionary<int, float>>();
+    private Dictionary<string, Texture2D> _gridTexs = new Dictionary<string, Texture2D>();
+    private Dictionary<string, GridDim> _gridDims = new Dictionary<string, GridDim>();
     private List<int> _expiredCache = new List<int>();
 
     #endregion
@@ -174,7 +174,7 @@ public class DiagnosticPanel : MonoBehaviour
         if (_texList.Count > 1) h += _ctrlH + 2f;
         if (_texList.Count > 0)
         {
-            byte texId = GetActiveHeatmapTexId();
+            string texId = GetActiveHeatmapTexId();
             if (_gridDims.TryGetValue(texId, out GridDim dim))
                 h += dim.MapH + 4f;
         }
@@ -383,9 +383,9 @@ public class DiagnosticPanel : MonoBehaviour
 
     #region Tab: 热力图
 
-    byte GetActiveHeatmapTexId()
+    string GetActiveHeatmapTexId()
     {
-        if (_texList.Count == 0) return 255;
+        if (_texList.Count == 0) return null;
         if (_activeTexSubTab >= _texList.Count) _activeTexSubTab = 0;
         return _texList[_activeTexSubTab].TexId;
     }
@@ -404,7 +404,7 @@ public class DiagnosticPanel : MonoBehaviour
             y += 2f;
         }
 
-        byte texId = GetActiveHeatmapTexId();
+        string texId = GetActiveHeatmapTexId();
         EnsureGridTexture(texId);
 
         if (_gridTexs.TryGetValue(texId, out Texture2D gridTex) && gridTex != null
@@ -452,7 +452,7 @@ public class DiagnosticPanel : MonoBehaviour
         for (int i = 0; i < _texList.Count; i++)
         {
             GUI.backgroundColor = i == _activeTexSubTab ? new Color(0.3f, 0.7f, 0.3f) : Color.gray;
-            string label = "texId=" + _texList[i].TexId;
+            string label = _texList[i].TexId;
             if (GUI.Button(new Rect(x, y, 64f, _ctrlH), label))
                 _activeTexSubTab = i;
             x += 66f;
@@ -461,7 +461,7 @@ public class DiagnosticPanel : MonoBehaviour
         return y + _ctrlH;
     }
 
-    void EnsureGridTexture(byte texId)
+    void EnsureGridTexture(string texId)
     {
         DiagTextureInfo info = default;
         bool found = false;
@@ -515,7 +515,7 @@ public class DiagnosticPanel : MonoBehaviour
 
     #region 脏污追踪
 
-    void OnDirtyTiles(byte texId, int[] indices)
+    void OnDirtyTiles(string texId, int[] indices)
     {
         if (!_dirtyPerTex.TryGetValue(texId, out Dictionary<int, float> dict))
         {

@@ -4,6 +4,14 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using WPZ0325.RTStream;
 
+[System.Serializable]
+public struct DisplayBinding
+{
+    public string texId;
+    public MeshRenderer meshTarget;
+    public RawImage uiTarget;
+}
+
 public class ReceiverSetup : MonoBehaviour
 {
     #region 序列化字段
@@ -11,15 +19,11 @@ public class ReceiverSetup : MonoBehaviour
     [Header("核心模块")]
     [SerializeField] private MonoRTStreamReceiver _streamClient;
 
-    [Header("显示目标")]
-    [SerializeField] private MeshRenderer _cubeRenderer;
-    [SerializeField] private RawImage _displayImage;
+    [Header("显示绑定")]
+    [SerializeField] private DisplayBinding[] _bindings;
+
     [SerializeField] private Transform _rotateTarget;
     [SerializeField] private float _rotateSpeed = 90f;
-
-    [Header("订阅配置")]
-    [SerializeField] private bool _subscribeTexA = true;
-    [SerializeField] private bool _subscribeTexB = true;
 
     [Header("本地模拟")]
     [SerializeField] private bool _startLocal = true;
@@ -46,8 +50,8 @@ public class ReceiverSetup : MonoBehaviour
     private int _localPatternIndex;
     private string _ipInput;
     private string _portInput;
-    private Dictionary<byte, RenderTexture> _outputRTs = new Dictionary<byte, RenderTexture>();
-    private List<byte> _texIds = new List<byte>();
+    private Dictionary<string, RenderTexture> _outputRTs = new Dictionary<string, RenderTexture>();
+    private List<string> _texIds = new List<string>();
 
     #endregion
 
@@ -151,11 +155,12 @@ public class ReceiverSetup : MonoBehaviour
         ReleaseAllRTs();
         _texIds.Clear();
 
-        if (_subscribeTexA) _texIds.Add(0);
-        if (_subscribeTexB) _texIds.Add(1);
-
-        for (int i = 0; i < _texIds.Count; i++)
-            CreateOutputRT(_texIds[i], 2, 2);
+        foreach (DisplayBinding binding in _bindings)
+        {
+            if (string.IsNullOrEmpty(binding.texId)) continue;
+            _texIds.Add(binding.texId);
+            CreateOutputRT(binding.texId, 2, 2);
+        }
     }
 
     void ConnectToRemote()
@@ -171,15 +176,13 @@ public class ReceiverSetup : MonoBehaviour
         ReleaseAllRTs();
         _texIds.Clear();
 
-        if (_subscribeTexA) _texIds.Add(0);
-        if (_subscribeTexB) _texIds.Add(1);
-
-        for (int i = 0; i < _texIds.Count; i++)
+        foreach (DisplayBinding binding in _bindings)
         {
-            byte texId = _texIds[i];
-            CreateOutputRT(texId, 512, 512);
-            RenderTexture rt = _outputRTs[texId];
-            BindRTToDisplay(texId, rt);
+            if (string.IsNullOrEmpty(binding.texId)) continue;
+            _texIds.Add(binding.texId);
+            CreateOutputRT(binding.texId, 512, 512);
+            RenderTexture rt = _outputRTs[binding.texId];
+            BindRTToDisplay(binding.texId, rt);
         }
     }
 
@@ -223,7 +226,7 @@ public class ReceiverSetup : MonoBehaviour
 
     #region 纹理管理
 
-    void CreateOutputRT(byte texId, int w, int h)
+    void CreateOutputRT(string texId, int w, int h)
     {
         RenderTexture rt = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32)
         {
@@ -234,7 +237,7 @@ public class ReceiverSetup : MonoBehaviour
         _streamClient.BindOutputTexture(texId, rt);
     }
 
-    void ResizeOutputRT(byte texId, int w, int h)
+    void ResizeOutputRT(string texId, int w, int h)
     {
         if (_outputRTs.TryGetValue(texId, out RenderTexture existing))
         {
@@ -250,12 +253,16 @@ public class ReceiverSetup : MonoBehaviour
         }
     }
 
-    void BindRTToDisplay(byte texId, RenderTexture rt)
+    void BindRTToDisplay(string texId, RenderTexture rt)
     {
-        if (texId == 0 && _cubeRenderer != null)
-            _cubeRenderer.material.mainTexture = rt;
-        if (texId == 1 && _displayImage != null)
-            _displayImage.texture = rt;
+        foreach (DisplayBinding binding in _bindings)
+        {
+            if (binding.texId != texId) continue;
+            if (binding.meshTarget != null)
+                binding.meshTarget.material.mainTexture = rt;
+            if (binding.uiTarget != null)
+                binding.uiTarget.texture = rt;
+        }
     }
 
     void ReleaseAllRTs()
@@ -271,7 +278,7 @@ public class ReceiverSetup : MonoBehaviour
 
     #region 事件处理
 
-    void OnTextureAnnounce(byte texId, int w, int h)
+    void OnTextureAnnounce(string texId, int w, int h)
     {
         Debug.Log($"ReceiverSetup: TextureAnnounce texId={texId} ({w}x{h})");
 
@@ -392,12 +399,12 @@ public class ReceiverSetup : MonoBehaviour
             return y + _lineH;
         }
 
-        foreach (KeyValuePair<byte, RenderTexture> kv in _outputRTs)
+        foreach (KeyValuePair<string, RenderTexture> kv in _outputRTs)
         {
-            byte texId = kv.Key;
+            string texId = kv.Key;
             int w = kv.Value.width;
             int h = kv.Value.height;
-            string label = string.Format("texId={0}: {1}\u00d7{2}", texId, w, h);
+            string label = string.Format("{0}: {1}\u00d7{2}", texId, w, h);
             GUI.Label(new Rect(_panelPad, y, _panelW - _panelPad * 2, _lineH), label);
             y += _lineH;
         }
