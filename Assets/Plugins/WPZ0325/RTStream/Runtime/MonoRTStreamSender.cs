@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
@@ -62,35 +63,30 @@ namespace WPZ0325.RTStream
 
         #region 公开事件
 
-        /// <summary>
-        /// 当脏瓦片被检测到时触发。参数为纹理标识和脏瓦片索引数组（null 表示全帧关键帧）。
-        /// </summary>
-        public event System.Action<string, int[]> OnDirtyTilesDetected;
+        /// <summary>Host 启动监听时触发</summary>
+        public event System.Action OnHostStarted;
+        /// <summary>Host 停止监听时触发</summary>
+        public event System.Action OnHostStopped;
+        /// <summary>RenderTexture 注册成功时触发</summary>
+        public event System.Action<string, int, int> OnRenderTextureRegistered;
+        /// <summary>RenderTexture 注销时触发</summary>
+        public event System.Action<string> OnRenderTextureUnregistered;
+        /// <summary>RenderTexture 同步开始时触发（由暂停恢复）</summary>
+        public event System.Action<string> OnRenderTextureSyncStarted;
+        /// <summary>RenderTexture 同步暂停时触发</summary>
+        public event System.Action<string> OnRenderTextureSyncPaused;
+        /// <summary>RenderTexture 全帧（关键帧）发送时触发</summary>
+        public event System.Action<string> OnRenderTextureKeyFrameSent;
+        /// <summary>RenderTexture 脏瓦片增量帧发送时触发</summary>
+        public event System.Action<string, int[]> OnRenderTextureDirtyTilesSent;
+        /// <summary>客户端连接时触发</summary>
+        public event System.Action<int> OnClientConnected;
+        /// <summary>客户端断开时触发</summary>
+        public event System.Action<int> OnClientDisconnected;
 
         #endregion
 
         #region 公开方法
-
-        /// <summary>
-        /// 获取所有已注册纹理的诊断信息列表。
-        /// </summary>
-        public List<DiagTextureInfo> GetDiagTextureList()
-        {
-            List<DiagTextureInfo> list = new List<DiagTextureInfo>();
-            lock (_clientsLock)
-            {
-                foreach (KeyValuePair<string, TextureEntry> kv in _textures)
-                {
-                    list.Add(new DiagTextureInfo
-                    {
-                        TexId = kv.Key,
-                        Width = kv.Value.Differ.TexWidth,
-                        Height = kv.Value.Differ.TexHeight
-                    });
-                }
-            }
-            return list;
-        }
 
         /// <summary>
         /// 注册一个渲染纹理用于流式传输。
@@ -125,6 +121,7 @@ namespace WPZ0325.RTStream
             }
 
             Debug.Log($"MonoRTStreamSender: Registered texId=\"{texId}\" ({rt.width}x{rt.height})");
+            OnRenderTextureRegistered?.Invoke(texId, rt.width, rt.height);
         }
 
         /// <summary>
@@ -138,8 +135,46 @@ namespace WPZ0325.RTStream
                 {
                     entry.Differ.Dispose();
                     _textures.Remove(texId);
+                    OnRenderTextureUnregistered?.Invoke(texId);
                 }
             }
+        }
+
+        /// <summary>设置纹理的启用/暂停状态。暂停时不再检测脏瓦片</summary>
+        public void SetTextureEnabled(string texId, bool enabled)
+        {
+            lock (_clientsLock)
+            {
+                if (!_textures.TryGetValue(texId, out TextureEntry entry)) return;
+                if (entry.Enabled == enabled) return;
+
+                entry.Enabled = enabled;
+                if (enabled)
+                {
+                    foreach (ClientConnection c in _clients)
+                    {
+                        if (!c.Alive) continue;
+                        if (c.IsSubscribed(texId) && c.PendingKeyFrames != null)
+                            c.PendingKeyFrames.Add(texId);
+                    }
+                    OnRenderTextureSyncStarted?.Invoke(texId);
+                }
+                else
+                {
+                    OnRenderTextureSyncPaused?.Invoke(texId);
+                }
+            }
+        }
+
+        /// <summary>查询纹理当前是否启用</summary>
+        public bool IsTextureEnabled(string texId)
+        {
+            lock (_clientsLock)
+            {
+                if (_textures.TryGetValue(texId, out TextureEntry entry))
+                    return entry.Enabled;
+            }
+            return false;
         }
 
         /// <summary>启动 TCP 监听服务</summary>
@@ -155,6 +190,7 @@ namespace WPZ0325.RTStream
             _acceptThread.Start();
 
             Debug.Log($"MonoRTStreamSender: Started on port {port}");
+            OnHostStarted?.Invoke();
         }
 
         /// <summary>停止 TCP 监听服务并断开所有客户端</summary>
@@ -174,6 +210,7 @@ namespace WPZ0325.RTStream
             _acceptThread = null;
 
             Debug.Log("MonoRTStreamSender: Stopped");
+            OnHostStopped?.Invoke();
         }
 
         /// <summary>获取所有客户端的诊断信息字符串（队列深度等）</summary>
@@ -204,6 +241,9 @@ namespace WPZ0325.RTStream
 
         void Update()
         {
+            while (_mainThreadActions.TryDequeue(out System.Action action))
+                action();
+
             int totalClients;
             lock (_clientsLock)
             {
@@ -222,7 +262,7 @@ namespace WPZ0325.RTStream
                     string texId = kv.Key;
                     TextureEntry entry = kv.Value;
 
-                    bool wantKeyFrame = false;
+                    if (!entry.Enabled) continue;                    bool wantKeyFrame = false;
                     foreach (ClientConnection c in _clients)
                     {
                         if (!c.Alive) continue;
@@ -244,7 +284,7 @@ namespace WPZ0325.RTStream
                     {
                         int rawBytes = 8 + fullFrame.Length;
                         _rawDirtyBandwidth.Add(rawBytes);
-                        OnDirtyTilesDetected?.Invoke(texId, null);
+                        OnRenderTextureKeyFrameSent?.Invoke(texId);
                         SendTiledKeyFrame(texId, texW, texH, fullFrame);
                     }
                     else if (dirtyTiles != null && dirtyTiles.Count > 0)
@@ -257,7 +297,7 @@ namespace WPZ0325.RTStream
                         int[] indices = new int[dirtyTiles.Count];
                         for (int i = 0; i < dirtyTiles.Count; i++)
                             indices[i] = dirtyTiles[i].index;
-                        OnDirtyTilesDetected?.Invoke(texId, indices);
+                        OnRenderTextureDirtyTilesSent?.Invoke(texId, indices);
 
                         byte[] deltaPacket = FrameCodec.EncodeDeltaFrame(texId, dirtyTiles);
                         _upEncBandwidth.Add(deltaPacket.Length);
@@ -304,6 +344,7 @@ namespace WPZ0325.RTStream
         {
             public RenderTexture RT;
             public TileDiffer Differ;
+            public bool Enabled = true;
         }
 
         private class ClientConnection
@@ -413,6 +454,8 @@ namespace WPZ0325.RTStream
         private BandwidthMeter _upEncBandwidth = new BandwidthMeter();
         private BandwidthMeter _upSendBandwidth = new BandwidthMeter();
 
+        private ConcurrentQueue<System.Action> _mainThreadActions = new ConcurrentQueue<System.Action>();
+
         #endregion
 
         #region 连接与帧处理
@@ -471,11 +514,18 @@ namespace WPZ0325.RTStream
 
         void CleanupDeadClients()
         {
+            int removed = 0;
             for (int i = _clients.Count - 1; i >= 0; i--)
             {
                 if (_clients[i].Alive) continue;
                 _clients[i].Shutdown();
                 _clients.RemoveAt(i);
+                removed++;
+            }
+            if (removed > 0)
+            {
+                int total = _clients.Count;
+                _mainThreadActions.Enqueue(() => OnClientDisconnected?.Invoke(total));
             }
         }
 
@@ -506,6 +556,8 @@ namespace WPZ0325.RTStream
                                     conn.PendingKeyFrames.Add(texId);
                             }
                         }
+                        int clientCount = _clients.Count;
+                        _mainThreadActions.Enqueue(() => OnClientConnected?.Invoke(clientCount));
                     }
                 }
                 catch (SocketException)

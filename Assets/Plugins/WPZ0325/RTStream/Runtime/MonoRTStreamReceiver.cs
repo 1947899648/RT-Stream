@@ -50,10 +50,18 @@ namespace WPZ0325.RTStream
 
         #region 公开事件
 
-        /// <summary>脏瓦片被应用到渲染纹理后触发</summary>
-        public event System.Action<string, int[]> OnDirtyTilesApplied;
-        /// <summary>接收到纹理公告帧后触发</summary>
-        public event System.Action<string, int, int> OnTextureAnnounce;
+        /// <summary>成功连接到 Host 时触发</summary>
+        public event System.Action OnConnectedToHost;
+        /// <summary>与 Host 断开时触发</summary>
+        public event System.Action OnDisconnectedFromHost;
+        /// <summary>连接 Host 失败时触发</summary>
+        public event System.Action<string> OnConnectionFailed;
+        /// <summary>收到纹理公告帧（订阅纹理成功）时触发</summary>
+        public event System.Action<string, int, int> OnRenderTextureSubscribed;
+        /// <summary>取消订阅纹理时触发（收到 TextureRemove 帧）</summary>
+        public event System.Action<string> OnRenderTextureUnsubscribed;
+        /// <summary>纹理脏瓦片数据接收并应用到输出 RT 时触发</summary>
+        public event System.Action<string, int[]> OnRenderTextureDirtyTilesReceived;
 
         #endregion
 
@@ -87,11 +95,13 @@ namespace WPZ0325.RTStream
                 _running = true;
                 _receiveThread = new Thread(ReceiveLoop) { IsBackground = true };
                 _receiveThread.Start();
+                OnConnectedToHost?.Invoke();
             }
             catch (Exception e)
             {
                 Debug.LogError($"MonoRTStreamReceiver connect failed: {e.Message}");
                 Close();
+                OnConnectionFailed?.Invoke(e.Message);
             }
         }
 
@@ -106,6 +116,7 @@ namespace WPZ0325.RTStream
             _batch.Clear();
             ReleasePayloadBuffer();
             _meta.Clear();
+            OnDisconnectedFromHost?.Invoke();
         }
 
         /// <summary>将指定纹理绑定到输出 RenderTexture</summary>
@@ -120,28 +131,15 @@ namespace WPZ0325.RTStream
             _outputTextures.Remove(texId);
         }
 
-        /// <summary>获取所有已接收纹理公告的诊断信息列表</summary>
-        public List<DiagTextureInfo> GetDiagTextureList()
-        {
-            List<DiagTextureInfo> list = new List<DiagTextureInfo>();
-            foreach (KeyValuePair<string, TextureMeta> kv in _meta)
-            {
-                list.Add(new DiagTextureInfo
-                {
-                    TexId = kv.Key,
-                    Width = kv.Value.Width,
-                    Height = kv.Value.Height
-                });
-            }
-            return list;
-        }
-
         #endregion
 
         #region Unity 生命周期
 
         void Update()
         {
+            while (_mainThreadActions.TryDequeue(out System.Action action))
+                action();
+
             if (!_connected) return;
 
             _downRecvBandwidth.Sample();
@@ -187,7 +185,7 @@ namespace WPZ0325.RTStream
                     pos += 4 + tileBytes;
                 }
 
-                OnDirtyTilesApplied?.Invoke(texId, indices);
+                OnRenderTextureDirtyTilesReceived?.Invoke(texId, indices);
 
                 ApplyPacket(texId, raw);
             }
@@ -250,6 +248,8 @@ namespace WPZ0325.RTStream
         private BandwidthMeter _downRecvBandwidth = new BandwidthMeter();
         private BandwidthMeter _downProcBandwidth = new BandwidthMeter();
 
+        private ConcurrentQueue<System.Action> _mainThreadActions = new ConcurrentQueue<System.Action>();
+
         #endregion
 
         #region 纹理元数据
@@ -261,7 +261,7 @@ namespace WPZ0325.RTStream
 
             _meta[texId] = new TextureMeta { Width = texW, Height = texH };
             Debug.Log($"MonoRTStreamReceiver: TextureAnnounce texId=\"{texId}\" ({texW}x{texH})");
-            OnTextureAnnounce?.Invoke(texId, texW, texH);
+            OnRenderTextureSubscribed?.Invoke(texId, texW, texH);
         }
 
         #endregion
@@ -292,6 +292,7 @@ namespace WPZ0325.RTStream
                 }
             }
             _connected = false;
+            _mainThreadActions.Enqueue(() => OnDisconnectedFromHost?.Invoke());
         }
 
         bool ReadExact(NetworkStream s, byte[] buf, int offset, int count)

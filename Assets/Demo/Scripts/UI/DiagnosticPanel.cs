@@ -66,7 +66,6 @@ public class DiagnosticPanel : MonoBehaviour
     void Update()
     {
         _deltaTime += (Time.unscaledDeltaTime - _deltaTime) * 0.1f;
-        RefreshTexList();
         ClearExpiredTimestamps();
     }
 
@@ -89,8 +88,18 @@ public class DiagnosticPanel : MonoBehaviour
 
     void OnDestroy()
     {
-        if (_host != null) _host.OnDirtyTilesDetected -= OnDirtyTiles;
-        if (_client != null) _client.OnDirtyTilesApplied -= OnDirtyTiles;
+        if (_host != null)
+        {
+            _host.OnRenderTextureKeyFrameSent -= OnKeyFrame;
+            _host.OnRenderTextureDirtyTilesSent -= OnDirtyTile;
+            _host.OnRenderTextureRegistered -= OnRenderTextureRegistered;
+            _host.OnRenderTextureUnregistered -= OnRenderTextureUnregistered;
+        }
+        if (_client != null)
+        {
+            _client.OnRenderTextureDirtyTilesReceived -= OnDirtyTile;
+            _client.OnRenderTextureSubscribed -= OnRenderTextureSubscribed;
+        }
 
         foreach (Texture2D tex in _gridTexs.Values)
             if (tex != null) Destroy(tex);
@@ -113,16 +122,55 @@ public class DiagnosticPanel : MonoBehaviour
         else
             _role = "Idle";
 
-        if (_host != null) _host.OnDirtyTilesDetected += OnDirtyTiles;
-        if (_client != null) _client.OnDirtyTilesApplied += OnDirtyTiles;
+        if (_host != null)
+        {
+            _host.OnRenderTextureKeyFrameSent += OnKeyFrame;
+            _host.OnRenderTextureDirtyTilesSent += OnDirtyTile;
+            _host.OnRenderTextureRegistered += OnRenderTextureRegistered;
+            _host.OnRenderTextureUnregistered += OnRenderTextureUnregistered;
+        }
+        if (_client != null)
+        {
+            _client.OnRenderTextureDirtyTilesReceived += OnDirtyTile;
+            _client.OnRenderTextureSubscribed += OnRenderTextureSubscribed;
+        }
     }
 
-    void RefreshTexList()
+    #endregion
+
+    #region 纹理列表事件
+
+    void OnRenderTextureRegistered(string texId, int width, int height)
     {
-        if (_host != null)
-            _texList = _host.GetDiagTextureList();
-        else if (_client != null)
-            _texList = _client.GetDiagTextureList();
+        for (int i = 0; i < _texList.Count; i++)
+        {
+            if (_texList[i].TexId == texId)
+            {
+                _texList[i] = new DiagTextureInfo { TexId = texId, Width = width, Height = height };
+                return;
+            }
+        }
+        _texList.Add(new DiagTextureInfo { TexId = texId, Width = width, Height = height });
+    }
+
+    void OnRenderTextureUnregistered(string texId)
+    {
+        _texList.RemoveAll(t => t.TexId == texId);
+        if (_activeTexSubTab >= _texList.Count)
+            _activeTexSubTab = Mathf.Max(0, _texList.Count - 1);
+    }
+
+    void OnRenderTextureSubscribed(string texId, int width, int height)
+    {
+        for (int i = 0; i < _texList.Count; i++)
+        {
+            if (_texList[i].TexId == texId)
+            {
+                _texList[i] = new DiagTextureInfo { TexId = texId, Width = width, Height = height };
+                return;
+            }
+        }
+        _texList.Add(new DiagTextureInfo { TexId = texId, Width = width, Height = height });
     }
 
     #endregion
@@ -515,7 +563,7 @@ public class DiagnosticPanel : MonoBehaviour
 
     #region 脏污追踪
 
-    void OnDirtyTiles(string texId, int[] indices)
+    void OnKeyFrame(string texId)
     {
         if (!_dirtyPerTex.TryGetValue(texId, out Dictionary<int, float> dict))
         {
@@ -524,20 +572,25 @@ public class DiagnosticPanel : MonoBehaviour
         }
 
         float now = Time.time;
-        if (indices == null)
+        if (_gridDims.TryGetValue(texId, out GridDim dim))
         {
-            if (_gridDims.TryGetValue(texId, out GridDim dim))
-            {
-                int total = dim.TilesX * dim.TilesY;
-                for (int i = 0; i < total; i++)
-                    dict[i] = now;
-            }
+            int total = dim.TilesX * dim.TilesY;
+            for (int i = 0; i < total; i++)
+                dict[i] = now;
         }
-        else
+    }
+
+    void OnDirtyTile(string texId, int[] indices)
+    {
+        if (!_dirtyPerTex.TryGetValue(texId, out Dictionary<int, float> dict))
         {
-            for (int i = 0; i < indices.Length; i++)
-                dict[indices[i]] = now;
+            dict = new Dictionary<int, float>();
+            _dirtyPerTex[texId] = dict;
         }
+
+        float now = Time.time;
+        for (int i = 0; i < indices.Length; i++)
+            dict[indices[i]] = now;
     }
 
     void ClearExpiredTimestamps()

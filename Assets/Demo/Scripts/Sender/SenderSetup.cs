@@ -26,6 +26,8 @@ public class SenderSetup : MonoBehaviour
 
     private string _portInput;
     private string _ipInput;
+    private bool _isRunning;
+    private int _clientCount;
 
     #endregion
 
@@ -52,6 +54,11 @@ public class SenderSetup : MonoBehaviour
                 return;
             }
         }
+
+        _streamHost.OnHostStarted += OnHostStarted;
+        _streamHost.OnHostStopped += OnHostStopped;
+        _streamHost.OnClientConnected += OnClientConnected;
+        _streamHost.OnClientDisconnected += OnClientDisconnected;
 
         _ipInput = "0.0.0.0";
         _portInput = "7777";
@@ -85,9 +92,47 @@ public class SenderSetup : MonoBehaviour
         y += 4f;
         y = DrawClientCount(y);
         y += 4f;
+        y = DrawTextureControls(y);
+        y += 4f;
         DrawMenuButton(y);
 
         GUI.EndGroup();
+    }
+
+    void OnDestroy()
+    {
+        if (_streamHost != null)
+        {
+            _streamHost.OnHostStarted -= OnHostStarted;
+            _streamHost.OnHostStopped -= OnHostStopped;
+            _streamHost.OnClientConnected -= OnClientConnected;
+            _streamHost.OnClientDisconnected -= OnClientDisconnected;
+        }
+    }
+
+    #endregion
+
+    #region 事件处理
+
+    void OnHostStarted()
+    {
+        _isRunning = true;
+    }
+
+    void OnHostStopped()
+    {
+        _isRunning = false;
+        _clientCount = 0;
+    }
+
+    void OnClientConnected(int totalClients)
+    {
+        _clientCount = totalClients;
+    }
+
+    void OnClientDisconnected(int totalClients)
+    {
+        _clientCount = totalClients;
     }
 
     #endregion
@@ -96,7 +141,8 @@ public class SenderSetup : MonoBehaviour
 
     float CalcPanelHeight()
     {
-        return _panelPad + _ctrlH + 2f + _ctrlH + 4f + _ctrlH + 4f + _lineH + 4f + _ctrlH + _panelPad;
+        int texLines = _drawController != null ? _drawController.EntryCount : 0;
+        return _panelPad + _ctrlH + 2f + _ctrlH + 4f + _ctrlH + 4f + _lineH + 4f + _lineH * texLines + 4f + _ctrlH + _panelPad;
     }
 
     float DrawNetworkConfig(float y)
@@ -117,9 +163,7 @@ public class SenderSetup : MonoBehaviour
 
     float DrawHostControl(float y)
     {
-        bool running = _streamHost.IsRunning;
-
-        if (running)
+        if (_isRunning)
         {
             if (GUI.Button(new Rect(_panelPad, y, _panelW - _panelPad * 2, _ctrlH), "停止监听"))
                 _streamHost.StopHost();
@@ -140,11 +184,29 @@ public class SenderSetup : MonoBehaviour
 
     float DrawClientCount(float y)
     {
-        int count = _streamHost.IsRunning ? _streamHost.ClientCount : 0;
         GUI.Label(new Rect(_panelPad, y, _panelW - _panelPad * 2, _lineH),
-            string.Format("客户端: {0}", count));
+            string.Format("客户端: {0}", _clientCount));
 
         return y + _lineH;
+    }
+
+    float DrawTextureControls(float y)
+    {
+        if (_drawController == null) return y;
+
+        for (int i = 0; i < _drawController.EntryCount; i++)
+        {
+            string texId = _drawController.GetCanvasName(i);
+            if (string.IsNullOrEmpty(texId)) continue;
+
+            bool enabled = _streamHost.IsTextureEnabled(texId);
+            bool toggled = GUI.Toggle(new Rect(_panelPad, y, _panelW - _panelPad * 2, _lineH), enabled, texId);
+            if (toggled != enabled)
+                _streamHost.SetTextureEnabled(texId, toggled);
+            y += _lineH;
+        }
+
+        return y;
     }
 
     float DrawMenuButton(float y)
