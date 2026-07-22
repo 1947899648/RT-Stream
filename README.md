@@ -8,6 +8,8 @@
 
 RTStream 是一个基于 **GPU 瓦片差分** 的 Unity 渲染纹理流式传输插件。通过 ComputeShader 检测纹理帧间变化，**仅传输脏瓦片**，经 LZ4 压缩后通过 TCP 发送至远端，接收端使用 ComputeShader 将脏瓦片还原到输出 RenderTexture 上。适用于需要实时画面同步的场景（虚拟演播、远程协作、多屏同步等）。
 
+![RTStream Overview](rt-stream-overview.png)
+
 ### 1.2 核心技术栈
 
 | 层级 | 技术 |
