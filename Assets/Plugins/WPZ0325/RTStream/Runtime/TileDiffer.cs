@@ -33,18 +33,18 @@ namespace WPZ0325.RTStream
         /// <param name="shader">用于差异检测的 ComputeShader</param>
         public TileDiffer(RenderTexture rt, ComputeShader shader)
         {
-            RT = rt;
+            _rt = rt;
             _cs = shader;
             _texWidth = rt.width;
             _texHeight = rt.height;
             _tileSize = FrameCodec.TileSize;
             // 纹理尺寸小于瓦片尺寸时，将瓦片尺寸缩小至纹理宽度
             if (_tileSize > _texWidth) _tileSize = _texWidth;
-            TilesX = _texWidth / _tileSize;
-            TilesY = _texHeight / _tileSize;
+            _tilesX = _texWidth / _tileSize;
+            _tilesY = _texHeight / _tileSize;
             _tilePixels = _tileSize * _tileSize;
             _tileBytes = _tilePixels * 4;
-            _tileCount = TilesX * TilesY;
+            _tileCount = _tilesX * _tilesY;
 
             _kClear = _cs.FindKernel("KClear");
             _kHash = _cs.FindKernel("KHash");
@@ -84,25 +84,25 @@ namespace WPZ0325.RTStream
             _roundBytes = 0;
 
             _cs.SetInt("_TileSize", _tileSize);
-            _cs.SetInt("_TilesX", TilesX);
-            _cs.SetInt("_TilesY", TilesY);
+            _cs.SetInt("_TilesX", _tilesX);
+            _cs.SetInt("_TilesY", _tilesY);
 
             // 步骤1：清除索引缓冲区
             _cs.SetBuffer(_kClear, "_IdxBuffer", _idxBuffer);
             _cs.Dispatch(_kClear, 1, 1, 1);
 
             // 步骤2：计算每个瓦片的哈希值，与前一帧比较，将脏瓦片索引写入 _idxBuffer
-            _cs.SetTexture(_kHash, "_RT", RT);
+            _cs.SetTexture(_kHash, "_RT", _rt);
             _cs.SetBuffer(_kHash, "_PrevHashes", _prevHashesBuffer);
             _cs.SetBuffer(_kHash, "_IdxBuffer", _idxBuffer);
-            _cs.Dispatch(_kHash, TilesX, TilesY, 1);
+            _cs.Dispatch(_kHash, _tilesX, _tilesY, 1);
 
             if (wantKeyFrame)
             {
                 // 关键帧路径：跳过差异检测，直接收集全部瓦片数据
-                _cs.SetTexture(_kGatherAll, "_RT", RT);
+                _cs.SetTexture(_kGatherAll, "_RT", _rt);
                 _cs.SetBuffer(_kGatherAll, "_GatherBuffer", _gatherBuffer);
-                _cs.Dispatch(_kGatherAll, TilesX, TilesY, 1);
+                _cs.Dispatch(_kGatherAll, _tilesX, _tilesY, 1);
 
                 _gatherRequest = AsyncGPUReadback.Request(_gatherBuffer);
                 _phase = Phase.WaitingKeyGather;
@@ -114,7 +114,7 @@ namespace WPZ0325.RTStream
                 _cs.SetBuffer(_kPrepArgs, "_ArgsBuffer", _argsBuffer);
                 _cs.Dispatch(_kPrepArgs, 1, 1, 1);
 
-                _cs.SetTexture(_kGatherDirty, "_RT", RT);
+                _cs.SetTexture(_kGatherDirty, "_RT", _rt);
                 _cs.SetBuffer(_kGatherDirty, "_IdxBuffer", _idxBuffer);
                 _cs.SetBuffer(_kGatherDirty, "_GatherBuffer", _gatherBuffer);
                 // 使用间接调度，GPU 端决定实际需要处理的线程组数量
@@ -258,12 +258,9 @@ namespace WPZ0325.RTStream
 
         #region 私有字段
 
-        /// <summary>目标渲染纹理</summary>
-        private RenderTexture RT { get; set; }
-        /// <summary>水平方向的瓦片数量</summary>
-        private int TilesX { get; set; }
-        /// <summary>垂直方向的瓦片数量</summary>
-        private int TilesY { get; set; }
+        private RenderTexture _rt;
+        private int _tilesX;
+        private int _tilesY;
 
         private int _texWidth, _texHeight;
         private int _tileSize, _tilePixels, _tileBytes, _tileCount;

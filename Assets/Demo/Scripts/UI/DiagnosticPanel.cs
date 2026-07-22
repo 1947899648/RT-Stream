@@ -234,7 +234,14 @@ public class DiagnosticPanel : MonoBehaviour
 
     #region 头部
 
-    float DrawBackground(Rect r) { Color p = GUI.color; GUI.color = _bgColor; GUI.DrawTexture(r, Texture2D.whiteTexture); GUI.color = p; return 0; }
+    float DrawBackground(Rect r) 
+    { 
+        Color p = GUI.color; 
+        GUI.color = _bgColor; 
+        GUI.DrawTexture(r, Texture2D.whiteTexture); 
+        GUI.color = p; 
+        return 0; 
+    }
 
     float DrawHeader(float y)
     {

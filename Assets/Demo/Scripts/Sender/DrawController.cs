@@ -25,9 +25,9 @@ public class DrawController : MonoBehaviour
     [SerializeField] private DrawEntry[] _entries;
 
     [Header("笔刷")]
-    public Color brushColor = Color.black;
+    public Color BrushColor = Color.black;
     [Range(0.001f, 0.1f)]
-    public float brushSize = 0.01f;
+    public float BrushSize = 0.01f;
 
     #endregion
 
@@ -192,7 +192,7 @@ public class DrawController : MonoBehaviour
             GUI.DrawTexture(new Rect(r.x + r.width - 1f, r.y, 1f, r.height), Texture2D.whiteTexture);
             GUI.DrawTexture(new Rect(r.x, r.y + r.height - 1f, r.width, 1f), Texture2D.whiteTexture);
 
-            if (ColorEquals(brushColor, _palette[i]))
+            if (ColorEquals(BrushColor, _palette[i]))
             {
                 GUI.color = Color.white;
                 float inset = 4f;
@@ -204,7 +204,7 @@ public class DrawController : MonoBehaviour
 
             if (Event.current.type == EventType.MouseDown && r.Contains(Event.current.mousePosition))
             {
-                brushColor = _palette[i];
+                BrushColor = _palette[i];
                 Event.current.Use();
             }
 
@@ -219,10 +219,10 @@ public class DrawController : MonoBehaviour
         y += _lineH;
 
         float sliderW = PanelW - _panelPad * 2 - 60f;
-        float newSize = GUI.HorizontalSlider(new Rect(_panelPad, y, sliderW, _lineH), brushSize, 0.001f, 0.1f);
-        brushSize = Mathf.Round(newSize * 1000f) / 1000f;
+        float newSize = GUI.HorizontalSlider(new Rect(_panelPad, y, sliderW, _lineH), BrushSize, 0.001f, 0.1f);
+        BrushSize = Mathf.Round(newSize * 1000f) / 1000f;
 
-        GUI.Label(new Rect(_panelPad + sliderW + 6f, y, 55f, _lineH), brushSize.ToString("F3"));
+        GUI.Label(new Rect(_panelPad + sliderW + 6f, y, 55f, _lineH), BrushSize.ToString("F3"));
         y += _lineH;
 
         return y;
@@ -277,7 +277,7 @@ public class DrawController : MonoBehaviour
         {
             Vector2 uv = ScreenToUV(_entries[_activeIndex].rawImage, Input.mousePosition);
             float dist = Vector2.Distance(_prevUV.Value, uv);
-            int steps = Mathf.Max(1, Mathf.CeilToInt(dist / (brushSize * 0.5f)));
+            int steps = Mathf.Max(1, Mathf.CeilToInt(dist / (BrushSize * 0.5f)));
             for (int i = 1; i <= steps; i++)
                 DrawAt(_activeIndex, Vector2.Lerp(_prevUV.Value, uv, (float)i / steps));
             _prevUV = uv;
@@ -317,8 +317,8 @@ public class DrawController : MonoBehaviour
 
     void DrawAt(int index, Vector2 uv)
     {
-        _brushMat.SetVector("_BrushPos", new Vector4(uv.x, uv.y, brushSize, 0));
-        _brushMat.SetColor("_BrushColor", brushColor);
+        _brushMat.SetVector("_BrushPos", new Vector4(uv.x, uv.y, BrushSize, 0));
+        _brushMat.SetColor("_BrushColor", BrushColor);
         Graphics.Blit(_canvasRTs[index], _tempRTs[index]);
         Graphics.Blit(_tempRTs[index], _canvasRTs[index], _brushMat);
     }

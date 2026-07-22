@@ -362,12 +362,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   _streamClient: {fileID: 249526265}
   _bindings:
-  - texId: ImageA
-    meshTarget: {fileID: 519418909}
-    uiTarget: {fileID: 0}
-  - texId: ImageB
-    meshTarget: {fileID: 0}
-    uiTarget: {fileID: 1955702333}
+  - TexId: ImageA
+    MeshTarget: {fileID: 519418909}
+    UITarget: {fileID: 0}
+  - TexId: ImageB
+    MeshTarget: {fileID: 0}
+    UITarget: {fileID: 1955702333}
   _rotateTarget: {fileID: 519418911}
   _rotateSpeed: 90
   _startLocal: 1

@@ -7,9 +7,9 @@ using WPZ0325.RTStream;
 [System.Serializable]
 public struct DisplayBinding
 {
-    public string texId;
-    public MeshRenderer meshTarget;
-    public RawImage uiTarget;
+    public string TexId;
+    public MeshRenderer MeshTarget;
+    public RawImage UITarget;
 }
 
 public class ReceiverSetup : MonoBehaviour
@@ -157,9 +157,9 @@ public class ReceiverSetup : MonoBehaviour
 
         foreach (DisplayBinding binding in _bindings)
         {
-            if (string.IsNullOrEmpty(binding.texId)) continue;
-            _texIds.Add(binding.texId);
-            CreateOutputRT(binding.texId, 2, 2);
+            if (string.IsNullOrEmpty(binding.TexId)) continue;
+            _texIds.Add(binding.TexId);
+            CreateOutputRT(binding.TexId, 2, 2);
         }
     }
 
@@ -178,11 +178,11 @@ public class ReceiverSetup : MonoBehaviour
 
         foreach (DisplayBinding binding in _bindings)
         {
-            if (string.IsNullOrEmpty(binding.texId)) continue;
-            _texIds.Add(binding.texId);
-            CreateOutputRT(binding.texId, 512, 512);
-            RenderTexture rt = _outputRTs[binding.texId];
-            BindRTToDisplay(binding.texId, rt);
+            if (string.IsNullOrEmpty(binding.TexId)) continue;
+            _texIds.Add(binding.TexId);
+            CreateOutputRT(binding.TexId, 512, 512);
+            RenderTexture rt = _outputRTs[binding.TexId];
+            BindRTToDisplay(binding.TexId, rt);
         }
     }
 
@@ -257,11 +257,11 @@ public class ReceiverSetup : MonoBehaviour
     {
         foreach (DisplayBinding binding in _bindings)
         {
-            if (binding.texId != texId) continue;
-            if (binding.meshTarget != null)
-                binding.meshTarget.material.mainTexture = rt;
-            if (binding.uiTarget != null)
-                binding.uiTarget.texture = rt;
+            if (binding.TexId != texId) continue;
+            if (binding.MeshTarget != null)
+                binding.MeshTarget.material.mainTexture = rt;
+            if (binding.UITarget != null)
+                binding.UITarget.texture = rt;
         }
     }
 

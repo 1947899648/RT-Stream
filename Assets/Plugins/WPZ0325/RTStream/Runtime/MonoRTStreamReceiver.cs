@@ -145,10 +145,10 @@ namespace WPZ0325.RTStream
 
             while (_frameQueue.TryDequeue(out FrameEntry entry))
             {
-                _batch.Add(entry.data);
-                _netLagMs = entry.netLagMs;
+                _batch.Add(entry.Data);
+                _netLagMs = entry.NetLagMs;
                 long now = Stopwatch.GetTimestamp();
-                _localLagMs = (now - entry.recvTimestamp) * 1000f / Stopwatch.Frequency;
+                _localLagMs = (now - entry.RecvTimestamp) * 1000f / Stopwatch.Frequency;
                 _lastRecvWatchTimestamp = now;
             }
             if (_batch.Count == 0) return;
@@ -206,9 +206,9 @@ namespace WPZ0325.RTStream
 
         private struct FrameEntry
         {
-            public byte[] data;
-            public long recvTimestamp;
-            public float netLagMs;
+            public byte[] Data;
+            public long RecvTimestamp;
+            public float NetLagMs;
         }
 
         private struct TextureMeta
@@ -282,7 +282,7 @@ namespace WPZ0325.RTStream
                     _downRecvBandwidth.Add(frameLen);
                     long sendTicks = FrameCodec.GetTimestamp(frameData);
                     float netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
-                    _frameQueue.Enqueue(new FrameEntry { data = frameData, recvTimestamp = Stopwatch.GetTimestamp(), netLagMs = netLagMs });
+                    _frameQueue.Enqueue(new FrameEntry { Data = frameData, RecvTimestamp = Stopwatch.GetTimestamp(), NetLagMs = netLagMs });
                 }
                 catch
                 {

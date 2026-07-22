@@ -226,11 +226,6 @@ namespace WPZ0325.RTStream
         #endregion
 
         #region Unity 生命周期
-
-        void Start()
-        {
-        }
-
         void Update()
         {
             while (_mainThreadActions.TryDequeue(out System.Action action))
