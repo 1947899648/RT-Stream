@@ -57,7 +57,7 @@ public class MySender : MonoBehaviour
 **第 3 步**：启动监听：
 
 ```csharp
-_sender.StartHost(7777);
+_sender.StartHost("0.0.0.0", 9500);
 ```
 
 **第 4 步**：准备要传输的 RenderTexture（可通过 Camera.targetTexture 或自行创建）。
@@ -128,7 +128,7 @@ _receiver.BindOutputTexture("MainCamera", outputRT);
 **第 5 步**：连接到发送端（第三个参数传 `null` 表示订阅全部纹理）：
 
 ```csharp
-_receiver.Connect("127.0.0.1", 7777, null);
+_receiver.Connect("127.0.0.1", 9500, null);
 ```
 
 **第 6 步**：将 outputRT 显示到 UI 或 Mesh：
@@ -286,17 +286,18 @@ graph TD
 
 ---
 
-**`StartHost(int port)`**
+**`StartHost(string ip, int port)`**
 
 启动 TCP 监听，开始接受客户端连接。
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
+| `ip` | `string` | 监听 IP 地址，如 `"0.0.0.0"`（所有网卡）或 `"127.0.0.1"`（本地） |
 | `port` | `int` | 监听端口号，范围 1-65535 |
 
-- 内部创建 `TcpListener(IPAddress.Any, port)`，启动后台 `AcceptLoop` 线程
+- 内部创建 `TcpListener(IPAddress.Parse(ip), port)`，启动后台 `AcceptLoop` 线程
 - 触发事件 `OnHostStarted`
-- 重复调用前会自动执行 `StopHost()`
+- 重复调用前会自动清理上一次的监听状态（不触发 `OnHostStopped` 事件）
 
 ---
 
@@ -985,7 +986,7 @@ public class StreamSenderExample : MonoBehaviour
         _sourceCamera.targetTexture = _rt;
 
         // 启动并注册
-        _sender.StartHost(7777);
+        _sender.StartHost("0.0.0.0", 9500);
         _sender.RegisterTexture("MainCamera", _rt);
     }
 
@@ -1065,7 +1066,7 @@ public class StreamReceiverExample : MonoBehaviour
         _receiver.BindOutputTexture("MainCamera", _outputRT);
         _displayImage.texture = _outputRT;
 
-        _receiver.Connect("127.0.0.1", 7777, new[] { "MainCamera" });
+        _receiver.Connect("127.0.0.1", 9500, new[] { "MainCamera" });
     }
 
     void OnDestroy()
@@ -1122,7 +1123,7 @@ _sender.RegisterTexture("UI_Overlay", rtUI);
 _receiver.BindOutputTexture("CameraA", outputRT_A);
 _receiver.BindOutputTexture("UI_Overlay", outputRT_UI);
 
-_receiver.Connect("192.168.1.100", 7777, new[] { "CameraA", "UI_Overlay" });
+_receiver.Connect("192.168.1.100", 9500, new[] { "CameraA", "UI_Overlay" });
 // "CameraB" 不会被接收
 ```
 

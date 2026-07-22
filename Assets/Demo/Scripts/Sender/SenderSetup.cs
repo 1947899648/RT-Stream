@@ -65,7 +65,7 @@ public class SenderSetup : MonoBehaviour
         _streamHost.OnRenderTextureUnregistered += OnRenderTextureUnregistered;
 
         _ipInput = "0.0.0.0";
-        _portInput = "7777";
+        _portInput = "9500";
     }
 
     void OnGUI()
@@ -176,7 +176,7 @@ public class SenderSetup : MonoBehaviour
             if (GUI.Button(new Rect(_panelPad, y, _panelW - _panelPad * 2, _ctrlH), "启动监听"))
             {
                 if (int.TryParse(_portInput, out int port) && port > 0 && port < 65536)
-                    _streamHost.StartHost(port);
+                    _streamHost.StartHost(_ipInput, port);
                 else
                     _portInput = _streamHost.ListenPort.ToString();
             }

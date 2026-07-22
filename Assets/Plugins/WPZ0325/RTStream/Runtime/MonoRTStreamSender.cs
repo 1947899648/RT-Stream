@@ -179,18 +179,18 @@ namespace WPZ0325.RTStream
         }
 
         /// <summary>启动 TCP 监听服务</summary>
-        public void StartHost(int port)
+        public void StartHost(string ip, int port)
         {
-            StopHost();
+            _cleanupHostInternal();
 
             ListenPort = port;
-            _listener = new TcpListener(IPAddress.Any, port);
+            _listener = new TcpListener(IPAddress.Parse(ip), port);
             _listener.Start();
             _running = true;
             _acceptThread = new Thread(AcceptLoop) { IsBackground = true };
             _acceptThread.Start();
 
-            Debug.Log($"MonoRTStreamSender: Started on port {port}");
+            Debug.Log($"MonoRTStreamSender: Started on {ip}:{port}");
             OnHostStarted?.Invoke();
         }
 
@@ -198,25 +198,7 @@ namespace WPZ0325.RTStream
         public void StopHost()
         {
             bool wasRunning = _running;
-            _running = false;
-            _listener?.Stop();
-            _acceptThread?.Join(1000);
-
-            lock (_clientsLock)
-            {
-                foreach (ClientConnection c in _clients) c.Shutdown();
-                _clients.Clear();
-
-                foreach (KeyValuePair<string, TextureEntry> kv in _textures)
-                {
-                    kv.Value.Differ.Dispose();
-                    OnRenderTextureUnregistered?.Invoke(kv.Key);
-                }
-                _textures.Clear();
-            }
-
-            _listener = null;
-            _acceptThread = null;
+            _cleanupHostInternal();
 
             Debug.Log("MonoRTStreamSender: Stopped");
             if (wasRunning)
@@ -505,6 +487,28 @@ namespace WPZ0325.RTStream
         #endregion
 
         #region 连接与帧处理
+
+        private void _cleanupHostInternal()
+        {
+            _running = false;
+            _listener?.Stop();
+            _acceptThread?.Join(1000);
+
+            lock (_clientsLock)
+            {
+                foreach (ClientConnection c in _clients) c.Shutdown();
+                _clients.Clear();
+
+                foreach (KeyValuePair<string, TextureEntry> kv in _textures)
+                {
+                    kv.Value.Differ.Dispose();
+                }
+                _textures.Clear();
+            }
+
+            _listener = null;
+            _acceptThread = null;
+        }
 
         void SendAnnounce(ClientConnection c, string texId, ushort texWidth, ushort texHeight)
         {

@@ -79,7 +79,7 @@ public class ReceiverSetup : MonoBehaviour
         _streamClient.OnRenderTextureAnnounced += OnRenderTextureAnnounced;
 
         _ipInput = "127.0.0.1";
-        _portInput = "7777";
+        _portInput = "9500";
 
         if (_startLocal)
             SwitchToLocal();
