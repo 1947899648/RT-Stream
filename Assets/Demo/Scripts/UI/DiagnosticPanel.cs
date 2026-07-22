@@ -10,7 +10,6 @@ public class DiagnosticPanel : MonoBehaviour
     [SerializeField] private Color _gridColor = new Color(0, 1, 0, 0.25f);
     [SerializeField] private Color _dirtyColor = new Color(1, 0, 0, 0.5f);
     [SerializeField] private Color _bgColor = new Color(0, 0, 0, 0.65f);
-    [SerializeField] private Color _sectionColor = new Color(1f, 0.85f, 0.4f);
 
     #endregion
 
@@ -234,13 +233,12 @@ public class DiagnosticPanel : MonoBehaviour
 
     #region 头部
 
-    float DrawBackground(Rect r) 
+    void DrawBackground(Rect r) 
     { 
         Color p = GUI.color; 
         GUI.color = _bgColor; 
         GUI.DrawTexture(r, Texture2D.whiteTexture); 
         GUI.color = p; 
-        return 0; 
     }
 
     float DrawHeader(float y)
@@ -522,7 +520,12 @@ public class DiagnosticPanel : MonoBehaviour
         bool found = false;
         foreach (DiagTextureInfo t in _texList)
         {
-            if (t.TexId == texId) { info = t; found = true; break; }
+            if (t.TexId == texId)
+            {
+                info = t;
+                found = true;
+                break;
+            }
         }
         if (!found) return;
 

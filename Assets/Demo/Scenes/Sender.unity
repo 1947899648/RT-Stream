@@ -476,16 +476,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _entries:
-  - name: ImageA
-    rawImage: {fileID: 37861673}
-    textureWidth: 1024
-    textureHeight: 2048
-  - name: ImageB
-    rawImage: {fileID: 167296684}
-    textureWidth: 4096
-    textureHeight: 4096
-  brushColor: {r: 0, g: 0, b: 0, a: 1}
-  brushSize: 0.05
+  - Name: ImageA
+    RawImage: {fileID: 37861673}
+    TextureWidth: 1024
+    TextureHeight: 2048
+  - Name: ImageB
+    RawImage: {fileID: 167296684}
+    TextureWidth: 4096
+    TextureHeight: 4096
+  BrushColor: {r: 0, g: 0, b: 0, a: 1}
+  BrushSize: 0.05
 --- !u!4 &559408112
 Transform:
   m_ObjectHideFlags: 0

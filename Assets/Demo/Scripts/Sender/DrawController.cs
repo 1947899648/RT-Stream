@@ -7,12 +7,12 @@ using UnityEngine.UI;
 [System.Serializable]
 public struct DrawEntry
 {
-    public string name;
-    public RawImage rawImage;
+    public string Name;
+    public RawImage RawImage;
     [Range(64, 8192)]
-    public int textureWidth;
+    public int TextureWidth;
     [Range(64, 8192)]
-    public int textureHeight;
+    public int TextureHeight;
 }
 
 #endregion
@@ -72,7 +72,7 @@ public class DrawController : MonoBehaviour
     public string GetCanvasName(int index)
     {
         if (index >= 0 && index < _entries.Length)
-            return _entries[index].name;
+            return _entries[index].Name;
         return null;
     }
 
@@ -107,16 +107,16 @@ public class DrawController : MonoBehaviour
 
         for (int i = 0; i < count; i++)
         {
-            int w = Mathf.Clamp(_entries[i].textureWidth, 64, 8192) / 64 * 64;
-            int h = Mathf.Clamp(_entries[i].textureHeight, 64, 8192) / 64 * 64;
+            int w = Mathf.Clamp(_entries[i].TextureWidth, 64, 8192) / 64 * 64;
+            int h = Mathf.Clamp(_entries[i].TextureHeight, 64, 8192) / 64 * 64;
 
             _canvasRTs[i] = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32) { filterMode = FilterMode.Bilinear };
             _tempRTs[i] = new RenderTexture(w, h, 0, RenderTextureFormat.ARGB32) { filterMode = FilterMode.Bilinear };
 
-            _entries[i].rawImage.texture = _canvasRTs[i];
+            _entries[i].RawImage.texture = _canvasRTs[i];
 
-            if (!string.IsNullOrEmpty(_entries[i].name))
-                _nameToIndex[_entries[i].name] = i;
+            if (!string.IsNullOrEmpty(_entries[i].Name))
+                _nameToIndex[_entries[i].Name] = i;
         }
 
         ClearAll();
@@ -243,7 +243,7 @@ public class DrawController : MonoBehaviour
         {
             int w = _canvasRTs[_activeIndex].width;
             int h = _canvasRTs[_activeIndex].height;
-            info = string.Format("绘制: {0} ({1}\u00d7{2})", _entries[_activeIndex].name, w, h);
+            info = string.Format("绘制: {0} ({1}\u00d7{2})", _entries[_activeIndex].Name, w, h);
         }
         else
         {
@@ -268,14 +268,14 @@ public class DrawController : MonoBehaviour
             if (hit >= 0)
             {
                 _activeIndex = hit;
-                Vector2 uv = ScreenToUV(_entries[hit].rawImage, Input.mousePosition);
+                Vector2 uv = ScreenToUV(_entries[hit].RawImage, Input.mousePosition);
                 _prevUV = uv;
                 DrawAt(hit, uv);
             }
         }
         else if (Input.GetMouseButton(0) && _prevUV.HasValue && _activeIndex >= 0)
         {
-            Vector2 uv = ScreenToUV(_entries[_activeIndex].rawImage, Input.mousePosition);
+            Vector2 uv = ScreenToUV(_entries[_activeIndex].RawImage, Input.mousePosition);
             float dist = Vector2.Distance(_prevUV.Value, uv);
             int steps = Mathf.Max(1, Mathf.CeilToInt(dist / (BrushSize * 0.5f)));
             for (int i = 1; i <= steps; i++)
@@ -293,7 +293,7 @@ public class DrawController : MonoBehaviour
     {
         for (int i = 0; i < _entries.Length; i++)
         {
-            RectTransform rt = _entries[i].rawImage.GetComponent<RectTransform>();
+            RectTransform rt = _entries[i].RawImage.GetComponent<RectTransform>();
             if (rt != null && RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos))
                 return i;
         }

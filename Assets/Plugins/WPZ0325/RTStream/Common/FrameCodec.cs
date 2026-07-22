@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net.Sockets;
 using System.Text;
 
 namespace WPZ0325.RTStream
@@ -10,9 +11,9 @@ namespace WPZ0325.RTStream
     public struct DirtyTile
     {
         /// <summary>瓦片在纹理中的线性索引</summary>
-        public int index;
+        public int Index;
         /// <summary>瓦片的原始像素数据（RGBA32，TileSize×TileSize×4 字节）</summary>
-        public byte[] data;
+        public byte[] Data;
     }
 
     /// <summary>
@@ -112,8 +113,8 @@ namespace WPZ0325.RTStream
             int pos = 1 + texIdLen;
             foreach (DirtyTile tile in tiles)
             {
-                BitConverter.GetBytes(tile.index).CopyTo(payload, pos);
-                Buffer.BlockCopy(tile.data, 0, payload, pos + 4, tileBytes);
+                BitConverter.GetBytes(tile.Index).CopyTo(payload, pos);
+                Buffer.BlockCopy(tile.Data, 0, payload, pos + 4, tileBytes);
                 pos += 4 + tileBytes;
             }
 
@@ -286,6 +287,21 @@ namespace WPZ0325.RTStream
                 if (data.Length < pos + idLen) return false;
                 texIds[i] = Encoding.UTF8.GetString(data, pos, idLen);
                 pos += idLen;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 从网络流中读取指定数量的字节，阻塞直到填满缓冲区或流结束。
+        /// </summary>
+        public static bool ReadExact(NetworkStream s, byte[] buf, int offset, int count)
+        {
+            int received = 0;
+            while (received < count)
+            {
+                int n = s.Read(buf, offset + received, count - received);
+                if (n <= 0) return false;
+                received += n;
             }
             return true;
         }

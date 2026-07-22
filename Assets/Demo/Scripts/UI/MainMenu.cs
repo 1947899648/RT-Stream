@@ -14,6 +14,8 @@ public class MainMenu : MonoBehaviour
     private int _writeIdx;
     private int _count;
     private float _sampleTimer;
+    private GUIStyle _fpsStyle;
+    private GUIStyle _btnStyle;
 
     void Awake()
     {
@@ -37,6 +39,21 @@ public class MainMenu : MonoBehaviour
 
     void OnGUI()
     {
+        if (_fpsStyle == null)
+        {
+            _fpsStyle = new GUIStyle
+            {
+                fontSize = 18,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.green }
+            };
+            _btnStyle = new GUIStyle(GUI.skin.button)
+            {
+                fontSize = 32,
+                fontStyle = FontStyle.Bold
+            };
+        }
         float cx = Screen.width * 0.5f;
         float cy = Screen.height * 0.5f;
         float chartX = cx - _chartW * 0.5f;
@@ -45,29 +62,16 @@ public class MainMenu : MonoBehaviour
         DrawFpsChart(new Rect(chartX, chartY, _chartW, _chartH));
 
         int fps = Mathf.RoundToInt(1f / _deltaTime);
-        GUIStyle fpsStyle = new GUIStyle
-        {
-            fontSize = 18,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = Color.green }
-        };
-        GUI.Label(new Rect(cx - 200f, chartY + _chartH + 4f, 400f, 20f), $"{fps} FPS", fpsStyle);
+        GUI.Label(new Rect(cx - 200f, chartY + _chartH + 4f, 400f, 20f), $"{fps} FPS", _fpsStyle);
 
         float senderX = cx - _btnW - 10f;
         float btnY = cy - _btnH * 0.5f;
         float receiverX = cx + 10f;
 
-        GUIStyle btnStyle = new GUIStyle(GUI.skin.button)
-        {
-            fontSize = 32,
-            fontStyle = FontStyle.Bold
-        };
-
-        if (GUI.Button(new Rect(senderX, btnY, _btnW, _btnH), "Sender", btnStyle))
+        if (GUI.Button(new Rect(senderX, btnY, _btnW, _btnH), "Sender", _btnStyle))
             SceneManager.LoadScene("Sender");
 
-        if (GUI.Button(new Rect(receiverX, btnY, _btnW, _btnH), "Receiver", btnStyle))
+        if (GUI.Button(new Rect(receiverX, btnY, _btnW, _btnH), "Receiver", _btnStyle))
             SceneManager.LoadScene("Receiver");
     }
 

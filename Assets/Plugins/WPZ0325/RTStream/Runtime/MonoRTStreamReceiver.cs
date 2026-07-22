@@ -274,12 +274,12 @@ namespace WPZ0325.RTStream
             {
                 try
                 {
-                    if (!ReadExact(_stream, lenBuf, 0, 4)) break;
+                    if (!FrameCodec.ReadExact(_stream, lenBuf, 0, 4)) break;
                     int frameLen = BitConverter.ToInt32(lenBuf, 0);
                     if (frameLen <= 0) break;
 
                     byte[] frameData = new byte[frameLen];
-                    if (!ReadExact(_stream, frameData, 0, frameLen)) break;
+                    if (!FrameCodec.ReadExact(_stream, frameData, 0, frameLen)) break;
                     _downRecvBandwidth.Add(frameLen);
                     long sendTicks = FrameCodec.GetTimestamp(frameData);
                     float netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
@@ -293,18 +293,6 @@ namespace WPZ0325.RTStream
             }
             _connected = false;
             _mainThreadActions.Enqueue(() => OnDisconnectedFromHost?.Invoke());
-        }
-
-        bool ReadExact(NetworkStream s, byte[] buf, int offset, int count)
-        {
-            int received = 0;
-            while (received < count)
-            {
-                int n = s.Read(buf, offset + received, count - received);
-                if (n <= 0) return false;
-                received += n;
-            }
-            return true;
         }
 
         byte[] UncompressPacket(byte[] packet)

@@ -181,7 +181,7 @@ namespace WPZ0325.RTStream
         /// <summary>启动 TCP 监听服务</summary>
         public void StartHost(string ip, int port)
         {
-            _cleanupHostInternal();
+            CleanupHostInternal();
 
             ListenPort = port;
             _listener = new TcpListener(IPAddress.Parse(ip), port);
@@ -198,7 +198,7 @@ namespace WPZ0325.RTStream
         public void StopHost()
         {
             bool wasRunning = _running;
-            _cleanupHostInternal();
+            CleanupHostInternal();
 
             Debug.Log("MonoRTStreamSender: Stopped");
             if (wasRunning)
@@ -249,7 +249,9 @@ namespace WPZ0325.RTStream
                     string texId = kv.Key;
                     TextureEntry entry = kv.Value;
 
-                    if (!entry.Enabled) continue;                    bool wantKeyFrame = false;
+                    if (!entry.Enabled) continue;
+
+                    bool wantKeyFrame = false;
                     foreach (ClientConnection c in _clients)
                     {
                         if (!c.Alive) continue;
@@ -283,7 +285,7 @@ namespace WPZ0325.RTStream
 
                         int[] indices = new int[dirtyTiles.Count];
                         for (int i = 0; i < dirtyTiles.Count; i++)
-                            indices[i] = dirtyTiles[i].index;
+                            indices[i] = dirtyTiles[i].Index;
                         OnRenderTextureDirtyTilesSent?.Invoke(texId, indices);
 
                         byte[] deltaPacket = FrameCodec.EncodeDeltaFrame(texId, dirtyTiles);
@@ -353,7 +355,14 @@ namespace WPZ0325.RTStream
                 _sendMeter = sendMeter;
                 SubscribedIds = subscribedIds;
                 PendingKeyFrames = subscribedIds != null ? new HashSet<string>(subscribedIds) : null;
-                try { _client.NoDelay = true; } catch { }
+                try
+                {
+                    _client.NoDelay = true;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"NoDelay failed: {e.Message}");
+                }
                 _sendThread = new Thread(SendLoop) { IsBackground = true };
                 _sendThread.Start();
             }
@@ -375,7 +384,7 @@ namespace WPZ0325.RTStream
                     Socket sock = _client.Client;
                     return !sock.Poll(0, SelectMode.SelectRead) || sock.Available > 0;
                 }
-                catch { return false; }
+                catch (Exception e) { Debug.LogWarning($"IsConnected failed: {e.Message}"); return false; }
             }
 
             public void Enqueue(byte[] packet)
@@ -396,7 +405,11 @@ namespace WPZ0325.RTStream
                     {
                         try
                         {
-                            if (!IsConnected()) { Alive = false; return; }
+                            if (!IsConnected())
+                            {
+                                Alive = false;
+                                return;
+                            }
                         }
                         catch (Exception e)
                         {
@@ -414,7 +427,11 @@ namespace WPZ0325.RTStream
                                 Monitor.Wait(_lock, 1000);
                                 try
                                 {
-                                    if (!IsConnected()) { Alive = false; return; }
+                                    if (!IsConnected())
+                                    {
+                                        Alive = false;
+                                        return;
+                                    }
                                 }
                                 catch (Exception e)
                                 {
@@ -436,7 +453,11 @@ namespace WPZ0325.RTStream
                         _sendMeter.Add(4 + len);
                         try
                         {
-                            if (!IsConnected()) { Alive = false; return; }
+                            if (!IsConnected())
+                            {
+                                Alive = false;
+                                return;
+                            }
                         }
                         catch (Exception e)
                         {
@@ -460,7 +481,14 @@ namespace WPZ0325.RTStream
             {
                 Alive = false;
                 lock (_lock) Monitor.Pulse(_lock);
-                try { _client.Close(); } catch { }
+                try
+                {
+                    _client.Close();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"Client Close failed: {e.Message}");
+                }
                 _sendThread.Join(500);
             }
         }
@@ -491,7 +519,7 @@ namespace WPZ0325.RTStream
 
         #region 连接与帧处理
 
-        private void _cleanupHostInternal()
+        private void CleanupHostInternal()
         {
             _running = false;
             _listener?.Stop();
@@ -544,7 +572,7 @@ namespace WPZ0325.RTStream
                     int srcOff = ((ty * tileSize + row) * texWidth + tx * tileSize) * 4;
                     Buffer.BlockCopy(fullFrame, srcOff, tileData, row * tileRowBytes, tileRowBytes);
                 }
-                batch.Add(new DirtyTile { index = tileIndex, data = tileData });
+                batch.Add(new DirtyTile { Index = tileIndex, Data = tileData });
 
                 if (batch.Count >= maxPerBatch || tileIndex == totalTiles - 1)
                 {
@@ -596,7 +624,14 @@ namespace WPZ0325.RTStream
                     HashSet<string> subscribedIds = ReadHandshake(client);
                     if (subscribedIds == null)
                     {
-                        try { client.Close(); } catch { }
+                        try
+                        {
+                            client.Close();
+                        }
+                        catch (Exception e)
+                        {
+                            Debug.LogWarning($"Accept client Close failed: {e.Message}");
+                        }
                         continue;
                     }
 
@@ -620,12 +655,14 @@ namespace WPZ0325.RTStream
                         _mainThreadActions.Enqueue(() => OnClientConnected?.Invoke(clientCount));
                     }
                 }
-                catch (SocketException)
+                catch (SocketException e)
                 {
+                    Debug.LogWarning($"AcceptLoop SocketException: {e.Message}");
                     break;
                 }
-                catch (ObjectDisposedException)
+                catch (ObjectDisposedException e)
                 {
+                    Debug.LogWarning($"AcceptLoop ObjectDisposed: {e.Message}");
                     break;
                 }
             }
@@ -638,7 +675,7 @@ namespace WPZ0325.RTStream
                 client.ReceiveTimeout = 200;
                 NetworkStream stream = client.GetStream();
                 byte[] header = new byte[2];
-                if (!ReadExact(stream, header, 0, 2) || header[0] != (byte)FrameType.SubscribeReq)
+                if (!FrameCodec.ReadExact(stream, header, 0, 2) || header[0] != (byte)FrameType.SubscribeReq)
                     return null;
 
                 int count = header[1];
@@ -648,28 +685,19 @@ namespace WPZ0325.RTStream
                 for (int i = 0; i < count; i++)
                 {
                     byte[] lenBuf = new byte[1];
-                    if (!ReadExact(stream, lenBuf, 0, 1)) return null;
+                    if (!FrameCodec.ReadExact(stream, lenBuf, 0, 1)) return null;
                     int nameLen = lenBuf[0];
                     byte[] nameBuf = new byte[nameLen];
-                    if (!ReadExact(stream, nameBuf, 0, nameLen)) return null;
+                    if (!FrameCodec.ReadExact(stream, nameBuf, 0, nameLen)) return null;
                     ids.Add(Encoding.UTF8.GetString(nameBuf, 0, nameLen));
                 }
                 return ids;
             }
-            catch { }
-            return null;
-        }
-
-        bool ReadExact(NetworkStream s, byte[] buf, int offset, int count)
-        {
-            int received = 0;
-            while (received < count)
+            catch (Exception e)
             {
-                int n = s.Read(buf, offset + received, count - received);
-                if (n <= 0) return false;
-                received += n;
+                Debug.LogWarning($"ReadHandshake failed: {e.Message}");
             }
-            return true;
+            return null;
         }
 
         #endregion

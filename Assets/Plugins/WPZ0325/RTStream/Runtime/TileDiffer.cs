@@ -178,7 +178,11 @@ namespace WPZ0325.RTStream
         void PollIdx()
         {
             if (!_idxRequest.done) return;
-            if (_idxRequest.hasError) { _phase = Phase.Idle; return; }
+            if (_idxRequest.hasError)
+            {
+                _phase = Phase.Idle;
+                return;
+            }
 
             _idxRaw = _idxRequest.GetData<byte>().ToArray();
             _roundBytes = _idxRaw.Length;
@@ -207,7 +211,11 @@ namespace WPZ0325.RTStream
         void PollGather()
         {
             if (!_gatherRequest.done) return;
-            if (_gatherRequest.hasError) { _phase = Phase.Idle; return; }
+            if (_gatherRequest.hasError)
+            {
+                _phase = Phase.Idle;
+                return;
+            }
 
             NativeArray<byte> gather = _gatherRequest.GetData<byte>();
             _roundBytes += gather.Length;
@@ -224,7 +232,7 @@ namespace WPZ0325.RTStream
                 int tileIndex = BitConverter.ToInt32(_idxRaw, 4 + i * 4);
                 byte[] tileData = new byte[_tileBytes];
                 NativeArray<byte>.Copy(gather, srcOff, tileData, 0, _tileBytes);
-                _dirtyTiles.Add(new DirtyTile { index = tileIndex, data = tileData });
+                _dirtyTiles.Add(new DirtyTile { Index = tileIndex, Data = tileData });
             }
 
             _resultTiles = _dirtyTiles;
@@ -238,7 +246,11 @@ namespace WPZ0325.RTStream
         void PollKeyGather()
         {
             if (!_gatherRequest.done) return;
-            if (_gatherRequest.hasError) { _phase = Phase.Idle; return; }
+            if (_gatherRequest.hasError)
+            {
+                _phase = Phase.Idle;
+                return;
+            }
 
             NativeArray<byte> gather = _gatherRequest.GetData<byte>();
             _roundBytes = gather.Length;
