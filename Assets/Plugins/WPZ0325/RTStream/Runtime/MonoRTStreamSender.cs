@@ -387,16 +387,6 @@ namespace WPZ0325.RTStream
                 }
             }
 
-            private bool _isSocketAlive()
-            {
-                try
-                {
-                    Socket sock = _client.Client;
-                    return !sock.Poll(0, SelectMode.SelectRead) || sock.Available > 0;
-                }
-                catch { return false; }
-            }
-
             private void SendLoop()
             {
                 try
@@ -406,9 +396,14 @@ namespace WPZ0325.RTStream
                     {
                         try
                         {
-                            if (!_isSocketAlive()) { Alive = false; return; }
+                            if (!IsConnected()) { Alive = false; return; }
                         }
-                        catch { Alive = false; return; }
+                        catch (Exception e)
+                        {
+                            Debug.LogWarning($"SendLoop IsConnected failed: {e.Message}");
+                            Alive = false;
+                            return;
+                        }
 
                         byte[] packet;
                         lock (_lock)
@@ -419,9 +414,14 @@ namespace WPZ0325.RTStream
                                 Monitor.Wait(_lock, 1000);
                                 try
                                 {
-                                    if (!_isSocketAlive()) { Alive = false; return; }
+                                    if (!IsConnected()) { Alive = false; return; }
                                 }
-                                catch { Alive = false; return; }
+                                catch (Exception e)
+                                {
+                                    Debug.LogWarning($"SendLoop IsConnected failed: {e.Message}");
+                                    Alive = false;
+                                    return;
+                                }
                             }
                             packet = _queue.Dequeue();
                         }
@@ -436,12 +436,20 @@ namespace WPZ0325.RTStream
                         _sendMeter.Add(4 + len);
                         try
                         {
-                            if (!_isSocketAlive()) { Alive = false; return; }
+                            if (!IsConnected()) { Alive = false; return; }
                         }
-                        catch { Alive = false; return; }
+                        catch (Exception e)
+                        {
+                            Debug.LogWarning($"SendLoop IsConnected failed: {e.Message}");
+                            Alive = false;
+                            return;
+                        }
                     }
                 }
-                catch { }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"SendLoop outer failed: {e.Message}");
+                }
                 finally
                 {
                     Alive = false;
@@ -525,6 +533,7 @@ namespace WPZ0325.RTStream
 
             List<DirtyTile> batch = new List<DirtyTile>(maxPerBatch);
 
+            // —— 编码阶段：遍历全帧瓦片，切割像素并分批编码为 DeltaFrame ——
             for (int tileIndex = 0; tileIndex < totalTiles; tileIndex++)
             {
                 int tx = tileIndex % tilesX;
@@ -542,6 +551,7 @@ namespace WPZ0325.RTStream
                     byte[] packet = FrameCodec.EncodeDeltaFrame(texId, batch);
                     _upEncBandwidth.Add(packet.Length);
 
+                    // —— 分发阶段：将编码后的帧数据推送给所有订阅客户端 ——
                     lock (_clientsLock)
                     {
                         foreach (ClientConnection c in _clients)

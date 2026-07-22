@@ -204,6 +204,7 @@ namespace WPZ0325.RTStream
 
         #region 内部结构体
 
+        /// <summary>帧数据载体。Data 数组在 _batch.Clear() 后由 GC 回收，生命周期：ReceiveLoop 分配 → Update 消费 → 帧末丢弃。</summary>
         private struct FrameEntry
         {
             public byte[] Data;
@@ -284,8 +285,9 @@ namespace WPZ0325.RTStream
                     float netLagMs = (DateTime.UtcNow.Ticks - sendTicks) / (float)TimeSpan.TicksPerMillisecond;
                     _frameQueue.Enqueue(new FrameEntry { Data = frameData, RecvTimestamp = Stopwatch.GetTimestamp(), NetLagMs = netLagMs });
                 }
-                catch
+                catch (Exception e)
                 {
+                    Debug.LogWarning($"ReceiveLoop failed: {e.Message}");
                     break;
                 }
             }
